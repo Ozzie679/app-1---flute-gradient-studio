@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flute Gradient Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>Flute Gradient Studio</h1>
+  <p>Generate original fluted-glass gradient wallpapers &mdash; pick colors, shuffle, save in Mac / iPad / iPhone resolution.</p>
+</header>
+
+<div class="layout">
+  <div class="panel">
+
+    <div class="group">
+      <div class="group-label">Palette presets</div>
+      <div class="swatch-row" id="paletteRow"></div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Gradient colors</div>
+      <div class="colors-row">
+        <div class="color-input-wrap"><label>Start</label><input type="color" id="colorA"></div>
+        <div class="color-input-wrap"><label>Mid</label><input type="color" id="colorB"></div>
+        <div class="color-input-wrap"><label>End</label><input type="color" id="colorC"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-label">Angle <span class="val mono" id="angleVal"></span></div>
+      <input type="range" id="angle" min="0" max="180" step="1">
+    </div>
+
+    <div class="group">
+      <label class="checkbox-row"><input type="checkbox" id="glowEnabled" checked> Glow highlight</label>
+    </div>
+
+    <div class="group" id="glowControls">
+      <div class="colors-row" style="margin-bottom:12px;">
+        <div class="color-input-wrap"><label>Glow color</label><input type="color" id="glowColor"></div>
+      </div>
+      <div class="group-label">Glow position</div>
+      <select id="glowPos" class="mono select-field">
+        <option value="tl">Top left</option>
+        <option value="tr">Top right</option>
+        <option value="bl">Bottom left</option>
+        <option value="br">Bottom right</option>
+        <option value="c">Center</option>
+      </select>
+      <div class="group-label">Glow strength <span class="val mono" id="glowOpacityVal"></span></div>
+      <input type="range" id="glowOpacity" min="5" max="70" step="1">
+    </div>
+
+    <div class="group">
+      <div class="group-label">Flute density <span class="val mono" id="bandVal"></span></div>
+      <input type="range" id="bandCount" min="80" max="650" step="10">
+    </div>
+
+    <div class="group">
+      <div class="group-label">Flute strength <span class="val mono" id="fluteVal"></span></div>
+      <input type="range" id="fluteIntensity" min="5" max="70" step="1">
+    </div>
+
+    <div class="group">
+      <div class="group-label">Wave distortion <span class="val mono" id="waveVal"></span></div>
+      <input type="range" id="turbulence" min="0" max="100" step="1">
+    </div>
+
+    <div class="group">
+      <div class="group-label">Device</div>
+      <div class="seg" id="deviceSeg">
+        <button data-device="desktop" class="active">Desktop</button>
+        <button data-device="ipad">iPad</button>
+        <button data-device="iphone">iPhone</button>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" id="shuffleBtn">🎲 Shuffle</button>
+      <button class="btn primary" id="downloadBtn">Save PNG</button>
+    </div>
+    <div class="loading-note" id="loadingNote"></div>
+
+  </div>
+
+  <div class="stage">
+    <canvas id="main"></canvas>
+    <div class="stage-meta">
+      <span class="mono" id="paletteName">Custom</span>
+      <span class="mono" id="resLabel"></span>
+    </div>
+
+    <div class="gallery-head">
+      <h2>Quick variations</h2>
+      <button id="refreshGallery">↻ Refresh</button>
+    </div>
+    <div class="gallery" id="gallery"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
