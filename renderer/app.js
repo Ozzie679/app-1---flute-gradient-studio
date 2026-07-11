@@ -115,7 +115,32 @@ function renderMain(){
 function scheduleRender(){
   if(!renderPending){
     renderPending = true;
-    requestAnimationFrame(()=>{ renderPending=false; renderMain(); });
+    requestAnimationFrame(()=>{
+      renderPending=false;
+      renderMain();
+      saveCurrentSettings();
+    });
+  }
+}
+
+function applySavedSettings(saved){
+  if(!saved || typeof saved !== 'object') return;
+  if(saved.device && DEVICES[saved.device]) state.device = saved.device;
+  if(Array.isArray(saved.colors) && saved.colors.length === 3) state.colors = [...saved.colors];
+  if(typeof saved.angle === 'number') state.angle = saved.angle;
+  if(typeof saved.glowEnabled === 'boolean') state.glowEnabled = saved.glowEnabled;
+  if(saved.glowColor) state.glowColor = saved.glowColor;
+  if(saved.glowPos && GLOW_POS[saved.glowPos]) state.glowPos = saved.glowPos;
+  if(typeof saved.glowOpacity === 'number') state.glowOpacity = saved.glowOpacity;
+  if(typeof saved.bandCount === 'number') state.bandCount = saved.bandCount;
+  if(typeof saved.fluteIntensity === 'number') state.fluteIntensity = saved.fluteIntensity;
+  if(typeof saved.turbulence === 'number') state.turbulence = saved.turbulence;
+  if(saved.paletteName) state.paletteName = saved.paletteName;
+}
+
+function saveCurrentSettings(){
+  if(window.electronAPI?.saveSettings){
+    window.electronAPI.saveSettings(state);
   }
 }
 
@@ -276,7 +301,14 @@ function saveWallpaper(cfg){
 $('downloadBtn').addEventListener('click', ()=> saveWallpaper(state));
 
 // ---- init ----
-buildPaletteRow();
-syncControlsFromState();
-renderMain();
-buildGallery();
+async function init(){
+  if(window.electronAPI?.getSettings){
+    const saved = await window.electronAPI.getSettings();
+    applySavedSettings(saved);
+  }
+  buildPaletteRow();
+  syncControlsFromState();
+  renderMain();
+  buildGallery();
+}
+init();

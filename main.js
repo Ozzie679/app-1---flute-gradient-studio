@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
+let store;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -25,7 +26,18 @@ function createWindow() {
   // mainWindow.webContents.openDevTools();
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const { default: Store } = await import('electron-store');
+  store = new Store();
+
+  ipcMain.handle('get-settings', () => {
+    return store.get('gradientSettings', {});
+  });
+
+  ipcMain.handle('save-settings', (_event, settings) => {
+    store.set('gradientSettings', settings);
+  });
+
   createWindow();
 
   app.on('activate', () => {
