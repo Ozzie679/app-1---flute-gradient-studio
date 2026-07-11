@@ -5,6 +5,12 @@ const fs = require('fs');
 let mainWindow;
 let store;
 
+const appIcon = process.platform === 'darwin'
+  ? path.join(__dirname, 'build', 'icon.icns')
+  : process.platform === 'win32'
+    ? path.join(__dirname, 'build', 'icon.ico')
+    : path.join(__dirname, 'build', 'icon.png');
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1320,
@@ -12,6 +18,7 @@ function createWindow() {
     minWidth: 940,
     minHeight: 620,
     backgroundColor: '#0a0a0e',
+    icon: appIcon,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
