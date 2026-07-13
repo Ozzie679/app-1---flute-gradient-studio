@@ -42,30 +42,184 @@ function hexToRgba(hex, a){
   return `rgba(${r},${g},${b},${a})`;
 }
 
-function gradientCoords(w,h,angleDeg){
+// cxOverride/cyOverride let us compute the gradient axis against a taller
+// off-screen buffer (see buildColorField) while still treating w/h as the
+// logical, visible canvas size for the angle math.
+function gradientCoords(w,h,angleDeg,cxOverride,cyOverride){
   const a = angleDeg * Math.PI/180;
-  const cx=w/2, cy=h/2;
+  const cx = cxOverride!==undefined ? cxOverride : w/2;
+  const cy = cyOverride!==undefined ? cyOverride : h/2;
   const len = Math.sqrt(w*w+h*h)/2;
   return { x0:cx-Math.cos(a)*len, y0:cy-Math.sin(a)*len, x1:cx+Math.cos(a)*len, y1:cy+Math.sin(a)*len };
 }
 
-function drawFlutes(ctx,w,h,bandCount,intensityPct,turbulencePct){
+// Paints one soft radial patch of color, blended onto whatever's already on
+// the canvas. This is the building block for both the automatic accent
+// blobs and the user-controlled glow highlight.
+function drawBlob(ctx, gx, gy, radius, color, opacity, blend){
+  ctx.save();
+  ctx.globalCompositeOperation = blend;
+  const rg = ctx.createRadialGradient(gx,gy,0, gx,gy,radius);
+  rg.addColorStop(0, hexToRgba(color, opacity));
+  rg.addColorStop(1, hexToRgba(color, 0));
+  ctx.fillStyle = rg;
+  ctx.fillRect(0,0,ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
+}
+
+// A stable (non-random) seed derived from the palette/colors/glow position,
+// so the same settings always produce the same wave shape (no flicker while
+// dragging unrelated sliders like angle or band count), but different
+// palettes get visibly different wave curves.
+function seedFromCfg(cfg){
+  const s = `${cfg.paletteName}|${cfg.colors.join(',')}|${cfg.glowPos}`;
+  let h = 0;
+  for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i))|0; }
+  return Math.abs(h)%1000;
+}
+
+// Deterministic pseudo-random value per flute band index, used for subtle
+// natural brightness jitter between adjacent ridges (real fluted glass is
+// never perfectly uniform).
+function bandJitter(i){
+  const x = Math.sin(i*12.9898)*43758.5453;
+  return x - Math.floor(x);
+}
+
+// Builds the color layer BEFORE any warp is applied: a linear base gradient
+// plus two automatic accent blobs positioned in the gradient's transition
+// zone (not just re-coloring the start/end extremes), plus the user's glow
+// highlight. Everything here gets warped together afterwards, which is what
+// gives the glow and color regions their organic, non-linear edges instead
+// of a straight axis.
+//
+// The whole thing is built on a canvas taller than the final image (extra
+// "margin" above and below) so that when warpAndComposite() later shifts
+// columns up/down, it always has real pixels to sample from and never
+// exposes a transparent gap at the top/bottom edge.
+function buildColorField(w, h, cfg){
+  const margin = Math.ceil(h*0.18);
+  const tallH = h + margin*2;
+  const buf = document.createElement('canvas');
+  buf.width = w; buf.height = tallH;
+  const bctx = buf.getContext('2d');
+
+  const {x0,y0,x1,y1} = gradientCoords(w,h,cfg.angle, w/2, margin+h/2);
+  const grad = bctx.createLinearGradient(x0,y0,x1,y1);
+  cfg.colors.forEach((c,i)=> grad.addColorStop(i/(cfg.colors.length-1), c));
+  bctx.fillStyle = grad;
+  bctx.fillRect(0,0,w,tallH);
+
+  const angleRad = cfg.angle * Math.PI/180;
+  const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad);
+  // Perpendicular to the gradient axis: this is where the linear gradient is
+  // already passing through its mid-tone, so blobs placed here blend INTO
+  // the transition instead of just intensifying the already-start/end areas.
+  const perpX = -dirY, perpY = dirX;
+
+  const gx0 = w*(0.5 + perpX*0.26), gy0 = margin + h*(0.5 + perpY*0.26);
+  drawBlob(bctx, gx0, gy0, Math.max(w,h)*0.55, cfg.colors[1], 0.55, 'soft-light');
+
+  const gx1 = w*(0.5 - perpX*0.24), gy1 = margin + h*(0.5 - perpY*0.24);
+  drawBlob(bctx, gx1, gy1, Math.max(w,h)*0.48, cfg.colors[0], 0.35, 'overlay');
+
+  if(cfg.glowEnabled){
+    const [px,py] = GLOW_POS[cfg.glowPos];
+    drawBlob(bctx, w*px, margin+h*py, Math.max(w,h)*0.62, cfg.glowColor, cfg.glowOpacity/100, 'screen');
+  }
+
+  return { canvas: buf, margin };
+}
+
+// Takes the pre-warp color field and stamps it onto the visible canvas one
+// narrow vertical slice at a time, each slice sampled from a slightly
+// different vertical offset in the tall buffer. The offset follows a sum of
+// two sine waves (irregular, not a single uniform ripple), so straight
+// color boundaries become the varied curves/parabolas seen in the reference
+// wallpapers instead of one bent line.
+//
+// The slice width is locked to the flute band width (cfg.bandCount) on
+// purpose: if the warp and the flutes used different periods, they'd beat
+// against each other and create a moire-like visual noise. Sharing one grid
+// keeps the color bend and the flute ridges moving together.
+function warpAndComposite(ctx, w, h, field, cfg){
+  const { canvas: buf, margin } = field;
+  const turbulence = cfg.turbulence/100;
+  const baseAmp = h*0.012; // small baseline curve even at 0% wave distortion
+  const amp = Math.min(baseAmp + turbulence*h*0.16, margin*0.92);
+
+  const seed = seedFromCfg(cfg);
+  const f1 = 1.4 + (seed%7)*0.15;
+  const f2 = 2.6 + (seed%5)*0.2;
+  const p1 = seed*1.7;
+  const p2 = seed*0.9 + 1.3;
+
+  const step = w/cfg.bandCount;
+  ctx.clearRect(0,0,w,h);
+  for(let x=0; x<w; x+=step){
+    const bw = Math.min(step+1, w-x+1);
+    const t = (x+step/2)/w;
+    const wave = Math.sin(t*Math.PI*2*f1 + p1)*0.6 + Math.sin(t*Math.PI*2*f2 + p2)*0.4;
+    const offsetY = wave*amp;
+    const srcY = margin + offsetY;
+    ctx.drawImage(buf, x, srcY, bw, h, x, 0, bw, h);
+  }
+}
+
+// Reads back a single scaled-down horizontal strip of whatever's currently
+// on the canvas (the warped color field, at this point) so drawFlutes() can
+// make each ridge's brightness react to the color underneath it, brighter
+// where the underlying gradient is already light, more restrained where
+// it's dark. This is what makes the flutes read as glass catching light
+// rather than a flat repeating stripe pattern.
+function sampleLuminanceRow(ctx, w, h, samples){
+  const tmp = document.createElement('canvas');
+  tmp.width = samples; tmp.height = 1;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(ctx.canvas, 0, Math.floor(h*0.5), w, 1, 0,0, samples,1);
+  const data = tctx.getImageData(0,0,samples,1).data;
+  const lums = new Array(samples);
+  for(let i=0;i<samples;i++){
+    const r=data[i*4], g=data[i*4+1], b=data[i*4+2];
+    lums[i] = (0.299*r+0.587*g+0.114*b)/255;
+  }
+  return lums;
+}
+
+function drawFlutes(ctx,w,h,bandCount,intensityPct,turbulencePct,lums){
   const intensity = intensityPct/100;
   const turbulence = turbulencePct/100;
   const bw = w/bandCount;
   const segs = turbulence>0 ? Math.max(2, Math.round(10*turbulence)) : 1;
   const segH = h/segs;
+  const samples = lums ? lums.length : 0;
+
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
   for(let i=0;i<bandCount;i++){
     const bx = i*bw;
+
+    const jitter = 0.85 + bandJitter(i)*0.3; // 0.85-1.15, natural ridge-to-ridge variation
+    let lumFactor = 1;
+    if(samples){
+      const t = (bx+bw/2)/w;
+      const si = Math.min(samples-1, Math.max(0, Math.floor(t*samples)));
+      lumFactor = 0.75 + lums[si]*0.6; // brighter underlying color -> brighter highlight
+    }
+    const bandIntensity = Math.max(0, Math.min(1.3, intensity*jitter*lumFactor));
+
     for(let s=0;s<segs;s++){
       const sy = s*segH;
       const wobble = turbulence>0 ? Math.sin(i*0.14 + s*0.6) * turbulence * bw * 2.2 : 0;
       const g = ctx.createLinearGradient(bx+wobble,0,bx+bw+wobble,0);
-      g.addColorStop(0,   `rgba(0,0,0,${0.55*intensity})`);
-      g.addColorStop(0.5, `rgba(255,255,255,${0.9*intensity})`);
-      g.addColorStop(1,   `rgba(0,0,0,${0.55*intensity})`);
+      // Asymmetric shadow/highlight/shadow curve (peak slightly off-center)
+      // reads as a glass ridge catching light from one side, rather than a
+      // flat symmetric stripe.
+      g.addColorStop(0.00, `rgba(0,0,0,${0.50*bandIntensity})`);
+      g.addColorStop(0.35, `rgba(0,0,0,${0.15*bandIntensity})`);
+      g.addColorStop(0.55, `rgba(255,255,255,${1.00*bandIntensity})`);
+      g.addColorStop(0.72, `rgba(255,255,255,${0.25*bandIntensity})`);
+      g.addColorStop(1.00, `rgba(0,0,0,${0.45*bandIntensity})`);
       ctx.fillStyle = g;
       ctx.fillRect(bx+wobble-1, sy, bw+2, segH+1);
     }
@@ -75,26 +229,14 @@ function drawFlutes(ctx,w,h,bandCount,intensityPct,turbulencePct){
 
 function render(ctx, w, h, cfg){
   ctx.clearRect(0,0,w,h);
-  const {x0,y0,x1,y1} = gradientCoords(w,h,cfg.angle);
-  const grad = ctx.createLinearGradient(x0,y0,x1,y1);
-  cfg.colors.forEach((c,i)=> grad.addColorStop(i/(cfg.colors.length-1), c));
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,w,h);
 
-  if(cfg.glowEnabled){
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    const [px,py] = GLOW_POS[cfg.glowPos];
-    const gx=px*w, gy=py*h, gr=Math.max(w,h)*0.6;
-    const rg = ctx.createRadialGradient(gx,gy,0,gx,gy,gr);
-    rg.addColorStop(0, hexToRgba(cfg.glowColor, cfg.glowOpacity/100));
-    rg.addColorStop(1, hexToRgba(cfg.glowColor, 0));
-    ctx.fillStyle = rg;
-    ctx.fillRect(0,0,w,h);
-    ctx.restore();
-  }
+  const field = buildColorField(w, h, cfg);
+  warpAndComposite(ctx, w, h, field, cfg);
 
-  drawFlutes(ctx,w,h,cfg.bandCount,cfg.fluteIntensity,cfg.turbulence);
+  const sampleCount = Math.min(300, Math.max(60, Math.round(cfg.bandCount/2)));
+  const lums = sampleLuminanceRow(ctx, w, h, sampleCount);
+
+  drawFlutes(ctx, w, h, cfg.bandCount, cfg.fluteIntensity, cfg.turbulence, lums);
 }
 
 function fitCanvasToDevice(canvas, device, maxDim){
