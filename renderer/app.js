@@ -1,3 +1,14 @@
+import {
+  ShaderMount,
+  flutedGlassFragmentShader,
+  GlassGridShapes,
+  GlassDistortionShapes,
+  getShaderColorFromString,
+  ShaderFitOptions,
+} from '../node_modules/@paper-design/shaders/dist/index.js';
+
+console.log('[app.js] module imported successfully, script is running');
+
 const DEVICES = {
   desktop: { label:'Desktop (Mac)', w:6016, h:3900 },
   ipad:    { label:'iPad',          w:2752, h:2064 },
@@ -26,9 +37,14 @@ let state = {
   glowColor:PALETTES[0].glow,
   glowPos:'tr',
   glowOpacity:32,
-  bandCount:420,
-  fluteIntensity:32,
-  turbulence:0,
+  bandCount:420,        // no longer used by rendering, see note below
+  fluteIntensity:32,    // no longer used by rendering, see note below
+  turbulence:0,         // no longer used by rendering, see note below
+  shadows:0.2,
+  highlights:0.08,
+  fluteSize:0.35,
+  distortion:0.3,
+  fluteBlur:0.02,
   paletteName:PALETTES[0].name
 };
 
@@ -98,145 +114,162 @@ function bandJitter(i){
 // columns up/down, it always has real pixels to sample from and never
 // exposes a transparent gap at the top/bottom edge.
 function buildColorField(w, h, cfg){
-  const margin = Math.ceil(h*0.18);
-  const tallH = h + margin*2;
-  const buf = document.createElement('canvas');
-  buf.width = w; buf.height = tallH;
-  const bctx = buf.getContext('2d');
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
 
-  const {x0,y0,x1,y1} = gradientCoords(w,h,cfg.angle, w/2, margin+h/2);
-  const grad = bctx.createLinearGradient(x0,y0,x1,y1);
+  const {x0,y0,x1,y1} = gradientCoords(w,h,cfg.angle);
+  const grad = ctx.createLinearGradient(x0,y0,x1,y1);
   cfg.colors.forEach((c,i)=> grad.addColorStop(i/(cfg.colors.length-1), c));
-  bctx.fillStyle = grad;
-  bctx.fillRect(0,0,w,tallH);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,w,h);
 
   const angleRad = cfg.angle * Math.PI/180;
   const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad);
-  // Perpendicular to the gradient axis: this is where the linear gradient is
-  // already passing through its mid-tone, so blobs placed here blend INTO
-  // the transition instead of just intensifying the already-start/end areas.
   const perpX = -dirY, perpY = dirX;
 
-  const gx0 = w*(0.5 + perpX*0.26), gy0 = margin + h*(0.5 + perpY*0.26);
-  drawBlob(bctx, gx0, gy0, Math.max(w,h)*0.55, cfg.colors[1], 0.55, 'soft-light');
+  const gx0 = w*(0.5 + perpX*0.26), gy0 = h*(0.5 + perpY*0.26);
+  drawBlob(ctx, gx0, gy0, Math.max(w,h)*0.55, cfg.colors[1], 0.55, 'soft-light');
 
-  const gx1 = w*(0.5 - perpX*0.24), gy1 = margin + h*(0.5 - perpY*0.24);
-  drawBlob(bctx, gx1, gy1, Math.max(w,h)*0.48, cfg.colors[0], 0.35, 'overlay');
+  const gx1 = w*(0.5 - perpX*0.24), gy1 = h*(0.5 - perpY*0.24);
+  drawBlob(ctx, gx1, gy1, Math.max(w,h)*0.48, cfg.colors[0], 0.35, 'overlay');
 
   if(cfg.glowEnabled){
     const [px,py] = GLOW_POS[cfg.glowPos];
-    drawBlob(bctx, w*px, margin+h*py, Math.max(w,h)*0.62, cfg.glowColor, cfg.glowOpacity/100, 'screen');
+    drawBlob(ctx, w*px, h*py, Math.max(w,h)*0.62, cfg.glowColor, cfg.glowOpacity/100, 'screen');
   }
 
-  return { canvas: buf, margin };
+  return canvas;
 }
 
-// Takes the pre-warp color field and stamps it onto the visible canvas one
-// narrow vertical slice at a time, each slice sampled from a slightly
-// different vertical offset in the tall buffer. The offset follows a sum of
-// two sine waves (irregular, not a single uniform ripple), so straight
-// color boundaries become the varied curves/parabolas seen in the reference
-// wallpapers instead of one bent line.
-//
-// The slice width is locked to the flute band width (cfg.bandCount) on
-// purpose: if the warp and the flutes used different periods, they'd beat
-// against each other and create a moire-like visual noise. Sharing one grid
-// keeps the color bend and the flute ridges moving together.
-function warpAndComposite(ctx, w, h, field, cfg){
-  const { canvas: buf, margin } = field;
-  const turbulence = cfg.turbulence/100;
-  const baseAmp = h*0.012; // small baseline curve even at 0% wave distortion
-  const amp = Math.min(baseAmp + turbulence*h*0.16, margin*0.92);
-
-  const seed = seedFromCfg(cfg);
-  const f1 = 1.4 + (seed%7)*0.15;
-  const f2 = 2.6 + (seed%5)*0.2;
-  const p1 = seed*1.7;
-  const p2 = seed*0.9 + 1.3;
-
-  const step = w/cfg.bandCount;
-  ctx.clearRect(0,0,w,h);
-  for(let x=0; x<w; x+=step){
-    const bw = Math.min(step+1, w-x+1);
-    const t = (x+step/2)/w;
-    const wave = Math.sin(t*Math.PI*2*f1 + p1)*0.6 + Math.sin(t*Math.PI*2*f2 + p2)*0.4;
-    const offsetY = wave*amp;
-    const srcY = margin + offsetY;
-    ctx.drawImage(buf, x, srcY, bw, h, x, 0, bw, h);
-  }
-}
-
-// Reads back a single scaled-down horizontal strip of whatever's currently
-// on the canvas (the warped color field, at this point) so drawFlutes() can
-// make each ridge's brightness react to the color underneath it, brighter
-// where the underlying gradient is already light, more restrained where
-// it's dark. This is what makes the flutes read as glass catching light
-// rather than a flat repeating stripe pattern.
-function sampleLuminanceRow(ctx, w, h, samples){
-  const tmp = document.createElement('canvas');
-  tmp.width = samples; tmp.height = 1;
-  const tctx = tmp.getContext('2d');
-  tctx.drawImage(ctx.canvas, 0, Math.floor(h*0.5), w, 1, 0,0, samples,1);
-  const data = tctx.getImageData(0,0,samples,1).data;
-  const lums = new Array(samples);
-  for(let i=0;i<samples;i++){
-    const r=data[i*4], g=data[i*4+1], b=data[i*4+2];
-    lums[i] = (0.299*r+0.587*g+0.114*b)/255;
-  }
-  return lums;
-}
-
-function drawFlutes(ctx,w,h,bandCount,intensityPct,turbulencePct,lums){
-  const intensity = intensityPct/100;
-  const turbulence = turbulencePct/100;
-  const bw = w/bandCount;
-  const segs = turbulence>0 ? Math.max(2, Math.round(10*turbulence)) : 1;
-  const segH = h/segs;
-  const samples = lums ? lums.length : 0;
-
-  ctx.save();
-  ctx.globalCompositeOperation = 'overlay';
-  for(let i=0;i<bandCount;i++){
-    const bx = i*bw;
-
-    const jitter = 0.85 + bandJitter(i)*0.3; // 0.85-1.15, natural ridge-to-ridge variation
-    let lumFactor = 1;
-    if(samples){
-      const t = (bx+bw/2)/w;
-      const si = Math.min(samples-1, Math.max(0, Math.floor(t*samples)));
-      lumFactor = 0.75 + lums[si]*0.6; // brighter underlying color -> brighter highlight
+// ShaderMount sizes its internal canvas via ResizeObserver, which fires
+// asynchronously. Without this wait, pixel readback happens before the
+// canvas has grown past its browser-default 300x150 size, producing
+// blank exports. This polls via its own ResizeObserver and resolves as
+// soon as the canvas matches the target size, with a timeout as a
+// safety net so a stuck render can't hang forever.
+function waitForCanvasResize(canvas, expectedWidth, expectedHeight, timeoutMs = 3000){
+  return new Promise((resolve) => {
+    if (canvas.width === expectedWidth && canvas.height === expectedHeight) {
+      resolve();
+      return;
     }
-    const bandIntensity = Math.max(0, Math.min(1.3, intensity*jitter*lumFactor));
-
-    for(let s=0;s<segs;s++){
-      const sy = s*segH;
-      const wobble = turbulence>0 ? Math.sin(i*0.14 + s*0.6) * turbulence * bw * 2.2 : 0;
-      const g = ctx.createLinearGradient(bx+wobble,0,bx+bw+wobble,0);
-      // Asymmetric shadow/highlight/shadow curve (peak slightly off-center)
-      // reads as a glass ridge catching light from one side, rather than a
-      // flat symmetric stripe.
-      g.addColorStop(0.00, `rgba(0,0,0,${0.50*bandIntensity})`);
-      g.addColorStop(0.35, `rgba(0,0,0,${0.15*bandIntensity})`);
-      g.addColorStop(0.55, `rgba(255,255,255,${1.00*bandIntensity})`);
-      g.addColorStop(0.72, `rgba(255,255,255,${0.25*bandIntensity})`);
-      g.addColorStop(1.00, `rgba(0,0,0,${0.45*bandIntensity})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(bx+wobble-1, sy, bw+2, segH+1);
-    }
-  }
-  ctx.restore();
+    let settled = false;
+    const observer = new ResizeObserver(() => {
+      if (settled) return;
+      if (canvas.width === expectedWidth && canvas.height === expectedHeight) {
+        settled = true;
+        observer.disconnect();
+        clearTimeout(timeoutId);
+        resolve();
+      }
+    });
+    observer.observe(canvas);
+    const timeoutId = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      console.warn(`[shader] canvas never reached ${expectedWidth}x${expectedHeight} within ${timeoutMs}ms, stuck at ${canvas.width}x${canvas.height}. Reading pixels anyway.`);
+      resolve();
+    }, timeoutMs);
+  });
 }
 
-function render(ctx, w, h, cfg){
-  ctx.clearRect(0,0,w,h);
+// Runs a color field canvas through the FlutedGlass shader and resolves to a
+// canvas containing the final result. Creates a brand new hidden container
+// and ShaderMount per call, then tears both down immediately after. This is
+// deliberate: reusing one shared container across renders caused the main
+// preview and gallery thumbnails to collide when both rendered around the
+// same time.
+function applyFlutedGlass(sourceCanvas, w, h, cfg){
+  console.log('[shader] applyFlutedGlass called', w, h);
+  return new Promise((resolve, reject)=>{
+    sourceCanvas.toBlob(blob=>{
+      console.log('[shader] toBlob fired, blob exists:', !!blob);
+      if(!blob){ reject(new Error('Could not read color field canvas')); return; }
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = async ()=>{
+        console.log('[shader] image loaded', img.naturalWidth, img.naturalHeight);
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.left = '-99999px';
+        container.style.top = '0';
+        container.style.width = `${w}px`;
+        container.style.height = `${h}px`;
+        document.body.appendChild(container);
 
+        let shader;
+        try {
+          console.log('[shader] constructing ShaderMount...');
+          shader = new ShaderMount(
+            container,
+            flutedGlassFragmentShader,
+            {
+              u_image: img,
+              u_colorBack: getShaderColorFromString('#00000000'),
+              u_colorShadow: getShaderColorFromString('#000000'),
+              u_colorHighlight: getShaderColorFromString('#ffffff'),
+              u_shadows: cfg.shadows,
+              u_highlights: cfg.highlights,
+              u_size: cfg.fluteSize,
+              u_shape: GlassGridShapes.lines,
+              u_angle: 0,
+              u_distortionShape: GlassDistortionShapes.prism,
+              u_distortion: cfg.distortion,
+              u_shift: 0,
+              u_stretch: 0,
+              u_blur: cfg.fluteBlur,
+              u_edges: 0,
+              u_marginLeft: 0, u_marginRight: 0, u_marginTop: 0, u_marginBottom: 0,
+              u_grainMixer: 0,
+              u_grainOverlay: 0,
+              u_fit: ShaderFitOptions.cover,
+              u_scale: 1,
+              u_rotation: 0,
+              u_originX: 0.5,
+              u_originY: 0.5,
+              u_offsetX: 0,
+              u_offsetY: 0,
+              u_worldWidth: 0,
+              u_worldHeight: 0,
+            },
+            { preserveDrawingBuffer: true },
+            0, 0, 1, w*h
+          );
+
+          console.log('[shader] ShaderMount constructed, canvas size before wait:', shader.canvasElement.width, shader.canvasElement.height);
+          await waitForCanvasResize(shader.canvasElement, w, h);
+          console.log('[shader] canvas size after wait:', shader.canvasElement.width, shader.canvasElement.height);
+          const outCanvas = document.createElement('canvas');
+          outCanvas.width = w; outCanvas.height = h;
+          outCanvas.getContext('2d').drawImage(shader.canvasElement, 0, 0, w, h);
+          console.log('[shader] pixels copied to output canvas, resolving');
+          resolve(outCanvas);
+        } catch (err) {
+          console.error('[shader] FAILED:', err, err?.message, err?.stack);
+          reject(err);
+        } finally {
+          if(shader) shader.dispose();
+          container.remove();
+          URL.revokeObjectURL(url);
+        }
+      };
+      img.onerror = (e)=>{ console.error('[shader] image onerror', e); URL.revokeObjectURL(url); reject(new Error('Color field image failed to load')); };
+      img.src = url;
+    }, 'image/png');
+  });
+}
+
+async function render(ctx, w, h, cfg){
+  console.log('[render] start', w, h);
   const field = buildColorField(w, h, cfg);
-  warpAndComposite(ctx, w, h, field, cfg);
-
-  const sampleCount = Math.min(300, Math.max(60, Math.round(cfg.bandCount/2)));
-  const lums = sampleLuminanceRow(ctx, w, h, sampleCount);
-
-  drawFlutes(ctx, w, h, cfg.bandCount, cfg.fluteIntensity, cfg.turbulence, lums);
+  console.log('[render] color field built');
+  const finalCanvas = await applyFlutedGlass(field, w, h, cfg);
+  console.log('[render] shader applied, drawing to destination canvas');
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(finalCanvas, 0, 0, w, h);
+  console.log('[render] complete');
 }
 
 function fitCanvasToDevice(canvas, device, maxDim){
@@ -246,9 +279,9 @@ function fitCanvasToDevice(canvas, device, maxDim){
   canvas.height = Math.round(d.h*scale);
 }
 
-function renderMain(){
+async function renderMain(){
   fitCanvasToDevice(mainCanvas, state.device, 900);
-  render(mainCtx, mainCanvas.width, mainCanvas.height, state);
+  await render(mainCtx, mainCanvas.width, mainCanvas.height, state);
   document.getElementById('resLabel').textContent =
     `${DEVICES[state.device].w} × ${DEVICES[state.device].h}`;
   document.getElementById('paletteName').textContent = state.paletteName;
@@ -257,9 +290,9 @@ function renderMain(){
 function scheduleRender(){
   if(!renderPending){
     renderPending = true;
-    requestAnimationFrame(()=>{
+    requestAnimationFrame(async ()=>{
       renderPending=false;
-      renderMain();
+      await renderMain();
       saveCurrentSettings();
     });
   }
@@ -378,7 +411,7 @@ $('shuffleBtn').addEventListener('click', ()=>{
 });
 
 // ---- gallery ----
-function buildGallery(){
+async function buildGallery(){
   const gal = $('gallery');
   gal.innerHTML='';
   for(let i=0;i<6;i++){
@@ -388,8 +421,9 @@ function buildGallery(){
     const c = document.createElement('canvas');
     c.width=240; c.height=150;
     const ctx = c.getContext('2d');
-    render(ctx,240,150,cfg);
+    await render(ctx,240,150,cfg);
     wrap.appendChild(c);
+    // ...rest of this function stays exactly the same
 
     const dl = document.createElement('div');
     dl.className='dl';
@@ -420,7 +454,7 @@ function saveWallpaper(cfg){
     const off = document.createElement('canvas');
     off.width = d.w; off.height = d.h;
     const octx = off.getContext('2d');
-    render(octx, d.w, d.h, cfg);
+    await render(octx, d.w, d.h, cfg);
 
     const suggestedName = `flute-gradient-${cfg.paletteName.toLowerCase().replace(/\s+/g,'-')}-${cfg.device}.png`;
 
@@ -450,7 +484,7 @@ async function init(){
   }
   buildPaletteRow();
   syncControlsFromState();
-  renderMain();
-  buildGallery();
+  await renderMain();
+  await buildGallery();
 }
 init();
