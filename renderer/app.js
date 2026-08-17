@@ -29,13 +29,6 @@ const PALETTES = [
 ];
 const GLOW_POS = { tl:[0.22,0.22], tr:[0.78,0.22], bl:[0.22,0.78], br:[0.78,0.78], c:[0.5,0.5] };
 
-// Distortion used to be a user-facing slider (0-0.5). Removed from the UI
-// for v1 -- it wasn't adding enough visible variety to justify a control,
-// and it was the source of the edge-artifact tradeoff. Kept as a fixed
-// constant at its old default so the shader call signature and existing
-// saved-settings files don't need to change shape.
-const FIXED_DISTORTION = 0.3;
-
 
 let state = {
   device:'desktop',
@@ -48,6 +41,7 @@ let state = {
   shadows:0.2,
   highlights:0.08,
   fluteSize:0.55,
+  distortion:0.3,
   fluteBlur:0.08,
   paletteName:PALETTES[0].name
 };
@@ -234,7 +228,7 @@ function applyFlutedGlass(sourceCanvas, w, h, cfg){
               u_shape: GlassGridShapes.lines,
               u_angle: 0,
               u_distortionShape: GlassDistortionShapes.prism,
-              u_distortion: FIXED_DISTORTION,
+              u_distortion: cfg.distortion,
               u_shift: 0,
               u_stretch: 0,
               u_blur: cfg.fluteBlur,
@@ -367,6 +361,7 @@ function applySavedSettings(saved){
   if(typeof saved.shadows === 'number') state.shadows = clamp(saved.shadows, 0, 0.6);
   if(typeof saved.highlights === 'number') state.highlights = clamp(saved.highlights, 0, 0.35);
   if(typeof saved.fluteSize === 'number') state.fluteSize = clamp(saved.fluteSize, 0.4, 0.8);
+  if(typeof saved.distortion === 'number') state.distortion = clamp(saved.distortion, 0, 0.5);
   if(typeof saved.fluteBlur === 'number') state.fluteBlur = clamp(saved.fluteBlur, 0, 0.6);
   if(saved.paletteName) state.paletteName = saved.paletteName;
 }
@@ -397,6 +392,8 @@ function syncControlsFromState(){
   $('highlightsVal').textContent = state.highlights.toFixed(2);
   $('fluteSize').value = state.fluteSize;
   $('fluteSizeVal').textContent = state.fluteSize.toFixed(2);
+  $('distortion').value = state.distortion;
+  $('distortionVal').textContent = state.distortion.toFixed(2);
   $('fluteBlur').value = state.fluteBlur;
   $('fluteBlurVal').textContent = state.fluteBlur.toFixed(2);
   $('glowControls').style.display = state.glowEnabled ? 'block' : 'none';
@@ -421,6 +418,7 @@ $('glowOpacity').addEventListener('input', e=>{ state.glowOpacity=+e.target.valu
 $('shadows').addEventListener('input', e=>{ state.shadows=+e.target.value; $('shadowsVal').textContent=state.shadows.toFixed(2); scheduleRender(); });
 $('highlights').addEventListener('input', e=>{ state.highlights=+e.target.value; $('highlightsVal').textContent=state.highlights.toFixed(2); scheduleRender(); });
 $('fluteSize').addEventListener('input', e=>{ state.fluteSize=+e.target.value; $('fluteSizeVal').textContent=state.fluteSize.toFixed(2); scheduleRender(); });
+$('distortion').addEventListener('input', e=>{ state.distortion=+e.target.value; $('distortionVal').textContent=state.distortion.toFixed(2); scheduleRender(); });
 $('fluteBlur').addEventListener('input', e=>{ state.fluteBlur=+e.target.value; $('fluteBlurVal').textContent=state.fluteBlur.toFixed(2); scheduleRender(); });
 
 document.querySelectorAll('#deviceSeg button').forEach(b=>{
@@ -465,6 +463,7 @@ function randomCfg(){
     shadows: randomInRange(0, 0.4),
     highlights: randomInRange(0, 0.2),
     fluteSize: randomInRange(0.4, 0.8),
+    distortion: randomInRange(0, 0.5),
     fluteBlur: randomInRange(0, 0.25, 2),
     paletteName: p.name
   };
