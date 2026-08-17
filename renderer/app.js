@@ -29,6 +29,14 @@ const PALETTES = [
 ];
 const GLOW_POS = { tl:[0.22,0.22], tr:[0.78,0.22], bl:[0.22,0.78], br:[0.78,0.78], c:[0.5,0.5] };
 
+// Distortion used to be a user-facing slider (0-0.5). Removed from the UI
+// for v1 -- it wasn't adding enough visible variety to justify a control,
+// and it was the source of the edge-artifact tradeoff. Kept as a fixed
+// constant at its old default so the shader call signature and existing
+// saved-settings files don't need to change shape.
+const FIXED_DISTORTION = 0.3;
+
+
 let state = {
   device:'desktop',
   colors:[...PALETTES[0].colors],
@@ -37,20 +45,30 @@ let state = {
   glowColor:PALETTES[0].glow,
   glowPos:'tr',
   glowOpacity:32,
-  bandCount:420,        // no longer used by rendering, see note below
-  fluteIntensity:32,    // no longer used by rendering, see note below
-  turbulence:0,         // no longer used by rendering, see note below
   shadows:0.2,
   highlights:0.08,
-  fluteSize:0.35,
-  distortion:0.3,
-  fluteBlur:0.02,
+  fluteSize:0.55,
+  fluteBlur:0.08,
   paletteName:PALETTES[0].name
 };
 
 const mainCanvas = document.getElementById('main');
 const mainCtx = mainCanvas.getContext('2d');
-let renderPending = false;
+
+// Serialize-and-queue lock for the main preview render pipeline. Since
+// applyFlutedGlass() is async (toBlob -> Image load -> ShaderMount ->
+// resize wait), a fast slider drag can call scheduleRender() many times
+// before the in-flight render finishes. Letting those pipelines run
+// concurrently is what caused the flicker: several full render pipelines
+// racing to draw, with last-write-wins deciding what ends up on screen.
+// Instead, at most one render runs at a time. Any input that arrives while
+// a render is in flight just sets renderQueued; runRenderLoop() picks up
+// whatever `state` looks like *after* the current render finishes and does
+// exactly one follow-up pass, no matter how many inputs stacked up.
+let isRendering = false;
+let renderQueued = false;
+
+function clamp(v, min, max){ return Math.min(max, Math.max(min, v)); }
 
 function hexToRgba(hex, a){
   const h = hex.replace('#','');
@@ -216,7 +234,7 @@ function applyFlutedGlass(sourceCanvas, w, h, cfg){
               u_shape: GlassGridShapes.lines,
               u_angle: 0,
               u_distortionShape: GlassDistortionShapes.prism,
-              u_distortion: cfg.distortion,
+              u_distortion: FIXED_DISTORTION,
               u_shift: 0,
               u_stretch: 0,
               u_blur: cfg.fluteBlur,
@@ -272,30 +290,69 @@ async function render(ctx, w, h, cfg){
   console.log('[render] complete');
 }
 
-function fitCanvasToDevice(canvas, device, maxDim){
+// Pure calculation only -- does NOT touch the DOM. Splitting this out from
+// the old fitCanvasToDevice() is what fixes the black flash: assigning to
+// canvas.width/height clears the canvas bitmap even when you set it to the
+// value it already has (that's the HTML spec, not a bug), so we need to
+// know the target size *before* deciding whether a resize is even needed.
+function computeDeviceCanvasSize(device, maxDim){
   const d = DEVICES[device];
   const scale = Math.min(maxDim/d.w, maxDim/d.h);
-  canvas.width = Math.round(d.w*scale);
-  canvas.height = Math.round(d.h*scale);
+  return { w: Math.round(d.w*scale), h: Math.round(d.h*scale) };
 }
 
 async function renderMain(){
-  fitCanvasToDevice(mainCanvas, state.device, 900);
-  await render(mainCtx, mainCanvas.width, mainCanvas.height, state);
+  const { w, h } = computeDeviceCanvasSize(state.device, 900);
+
+  // All the expensive work happens on an offscreen canvas (buildColorField
+  // + applyFlutedGlass's own throwaway container/ShaderMount). mainCanvas,
+  // the one actually on screen, is not touched at all during this await --
+  // so whatever was already painted just stays there while this runs.
+  const field = buildColorField(w, h, state);
+  const finalCanvas = await applyFlutedGlass(field, w, h, state);
+
+  // Only resize mainCanvas if the device actually changed size. On a
+  // slider drag it never does, so this branch is skipped entirely and the
+  // canvas is never cleared -- the old frame survives right up until the
+  // drawImage below replaces it.
+  if (mainCanvas.width !== w || mainCanvas.height !== h) {
+    mainCanvas.width = w;
+    mainCanvas.height = h;
+  }
+
+  // Resize (if any) and draw happen in this same synchronous block, with
+  // no `await` between them. The browser can only repaint between JS
+  // tasks/microtasks, not in the middle of one, so even on a real device
+  // switch there's no frame where the canvas is visibly blank -- this is
+  // the standard offscreen-render-then-blit ("double buffering") pattern.
+  mainCtx.clearRect(0,0,w,h);
+  mainCtx.drawImage(finalCanvas, 0, 0, w, h);
+
   document.getElementById('resLabel').textContent =
     `${DEVICES[state.device].w} × ${DEVICES[state.device].h}`;
   document.getElementById('paletteName').textContent = state.paletteName;
 }
 
-function scheduleRender(){
-  if(!renderPending){
-    renderPending = true;
-    requestAnimationFrame(async ()=>{
-      renderPending=false;
-      await renderMain();
-      saveCurrentSettings();
-    });
+// Drains queued render requests one at a time. renderMain() always reads
+// live values straight off `state` (never a captured snapshot), so the
+// follow-up pass automatically reflects wherever the slider/control landed
+// last, even if several input events arrived while we were mid-render.
+async function runRenderLoop(){
+  if(isRendering){
+    renderQueued = true;
+    return;
   }
+  isRendering = true;
+  do {
+    renderQueued = false;
+    await renderMain();
+  } while(renderQueued);
+  isRendering = false;
+  saveCurrentSettings();
+}
+
+function scheduleRender(){
+  runRenderLoop();
 }
 
 function applySavedSettings(saved){
@@ -307,9 +364,10 @@ function applySavedSettings(saved){
   if(saved.glowColor) state.glowColor = saved.glowColor;
   if(saved.glowPos && GLOW_POS[saved.glowPos]) state.glowPos = saved.glowPos;
   if(typeof saved.glowOpacity === 'number') state.glowOpacity = saved.glowOpacity;
-  if(typeof saved.bandCount === 'number') state.bandCount = saved.bandCount;
-  if(typeof saved.fluteIntensity === 'number') state.fluteIntensity = saved.fluteIntensity;
-  if(typeof saved.turbulence === 'number') state.turbulence = saved.turbulence;
+  if(typeof saved.shadows === 'number') state.shadows = clamp(saved.shadows, 0, 0.6);
+  if(typeof saved.highlights === 'number') state.highlights = clamp(saved.highlights, 0, 0.35);
+  if(typeof saved.fluteSize === 'number') state.fluteSize = clamp(saved.fluteSize, 0.4, 0.8);
+  if(typeof saved.fluteBlur === 'number') state.fluteBlur = clamp(saved.fluteBlur, 0, 0.6);
   if(saved.paletteName) state.paletteName = saved.paletteName;
 }
 
@@ -333,12 +391,14 @@ function syncControlsFromState(){
   $('glowPos').value = state.glowPos;
   $('glowOpacity').value = state.glowOpacity;
   $('glowOpacityVal').textContent = state.glowOpacity+'%';
-  $('bandCount').value = state.bandCount;
-  $('bandVal').textContent = state.bandCount;
-  $('fluteIntensity').value = state.fluteIntensity;
-  $('fluteVal').textContent = state.fluteIntensity+'%';
-  $('turbulence').value = state.turbulence;
-  $('waveVal').textContent = state.turbulence+'%';
+  $('shadows').value = state.shadows;
+  $('shadowsVal').textContent = state.shadows.toFixed(2);
+  $('highlights').value = state.highlights;
+  $('highlightsVal').textContent = state.highlights.toFixed(2);
+  $('fluteSize').value = state.fluteSize;
+  $('fluteSizeVal').textContent = state.fluteSize.toFixed(2);
+  $('fluteBlur').value = state.fluteBlur;
+  $('fluteBlurVal').textContent = state.fluteBlur.toFixed(2);
   $('glowControls').style.display = state.glowEnabled ? 'block' : 'none';
   document.querySelectorAll('#deviceSeg button').forEach(b=>{
     b.classList.toggle('active', b.dataset.device===state.device);
@@ -358,9 +418,10 @@ $('glowEnabled').addEventListener('change', e=>{ state.glowEnabled=e.target.chec
 $('glowColor').addEventListener('input', e=>{ state.glowColor=e.target.value; scheduleRender(); });
 $('glowPos').addEventListener('change', e=>{ state.glowPos=e.target.value; scheduleRender(); });
 $('glowOpacity').addEventListener('input', e=>{ state.glowOpacity=+e.target.value; $('glowOpacityVal').textContent=state.glowOpacity+'%'; scheduleRender(); });
-$('bandCount').addEventListener('input', e=>{ state.bandCount=+e.target.value; $('bandVal').textContent=state.bandCount; scheduleRender(); });
-$('fluteIntensity').addEventListener('input', e=>{ state.fluteIntensity=+e.target.value; $('fluteVal').textContent=state.fluteIntensity+'%'; scheduleRender(); });
-$('turbulence').addEventListener('input', e=>{ state.turbulence=+e.target.value; $('waveVal').textContent=state.turbulence+'%'; scheduleRender(); });
+$('shadows').addEventListener('input', e=>{ state.shadows=+e.target.value; $('shadowsVal').textContent=state.shadows.toFixed(2); scheduleRender(); });
+$('highlights').addEventListener('input', e=>{ state.highlights=+e.target.value; $('highlightsVal').textContent=state.highlights.toFixed(2); scheduleRender(); });
+$('fluteSize').addEventListener('input', e=>{ state.fluteSize=+e.target.value; $('fluteSizeVal').textContent=state.fluteSize.toFixed(2); scheduleRender(); });
+$('fluteBlur').addEventListener('input', e=>{ state.fluteBlur=+e.target.value; $('fluteBlurVal').textContent=state.fluteBlur.toFixed(2); scheduleRender(); });
 
 document.querySelectorAll('#deviceSeg button').forEach(b=>{
   b.addEventListener('click', ()=>{ state.device=b.dataset.device; syncControlsFromState(); scheduleRender(); });
@@ -386,6 +447,10 @@ function buildPaletteRow(){
 }
 
 function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function randomInRange(min, max, decimals=2){
+  const v = min + Math.random()*(max-min);
+  return parseFloat(v.toFixed(decimals));
+}
 function randomCfg(){
   const p = randomFrom(PALETTES);
   const posKeys = Object.keys(GLOW_POS);
@@ -397,9 +462,10 @@ function randomCfg(){
     glowColor: p.glow,
     glowPos: randomFrom(posKeys),
     glowOpacity: Math.round(20+Math.random()*35),
-    bandCount: Math.round(250+Math.random()*350),
-    fluteIntensity: Math.round(20+Math.random()*35),
-    turbulence: Math.random()>0.6 ? Math.round(Math.random()*55) : 0,
+    shadows: randomInRange(0, 0.4),
+    highlights: randomInRange(0, 0.2),
+    fluteSize: randomInRange(0.4, 0.8),
+    fluteBlur: randomInRange(0, 0.25, 2),
     paletteName: p.name
   };
 }
