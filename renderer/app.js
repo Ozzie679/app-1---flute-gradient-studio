@@ -41,7 +41,7 @@ let state = {
   shadows:0.2,
   highlights:0.08,
   fluteSize:0.55,
-  distortion:0.3,
+  distortion:0,
   fluteBlur:0.08,
   paletteName:PALETTES[0].name
 };
@@ -463,7 +463,7 @@ function randomCfg(){
     shadows: randomInRange(0, 0.4),
     highlights: randomInRange(0, 0.2),
     fluteSize: randomInRange(0.4, 0.8),
-    distortion: randomInRange(0, 0.5),
+    distortion: randomInRange(0, 0.04),
     fluteBlur: randomInRange(0, 0.25, 2),
     paletteName: p.name
   };
