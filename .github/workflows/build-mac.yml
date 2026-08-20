@@ -10,6 +10,14 @@ jobs:
   build-mac:
     runs-on: macos-latest
     steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          actions-allow-unsecure-node-version: true
+
+      - name: Checkout code
+          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
