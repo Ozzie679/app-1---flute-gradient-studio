@@ -25,11 +25,11 @@
     "mac": {
       "category": "public.app-category.graphics-design",
       "target": "dmg",
-      "icon": "build/icon.icns"
+      "icon": "build/icon.png"
     },
     "win": {
       "target": "nsis",
-      "icon": "build/icon.ico",
+      "icon": "build/icon.png",
       "signAndEditExecutable": true
     },
     "linux": {
