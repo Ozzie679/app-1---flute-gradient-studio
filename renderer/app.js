@@ -149,87 +149,137 @@ function waitForCanvasResize(canvas, expectedWidth, expectedHeight, timeoutMs = 
   });
 }
 
-// Runs a color field canvas through the FlutedGlass shader and resolves to a
-// canvas containing the final result. Creates a brand new hidden container
-// and ShaderMount per call, then tears both down immediately after. This is
-// deliberate: reusing one shared container across renders caused the main
-// preview and gallery thumbnails to collide when both rendered around the
-// same time.
-function applyFlutedGlass(sourceCanvas, w, h, cfg){
-  return new Promise((resolve, reject)=>{
-    sourceCanvas.toBlob(blob=>{
-      if(!blob){ reject(new Error('Could not read color field canvas')); return; }
-      const url = URL.createObjectURL(blob);
-      const img = new Image();
-      img.onload = async ()=>{
-        const container = document.createElement('div');
-        container.style.position = 'fixed';
-        container.style.left = '-99999px';
-        container.style.top = '0';
-        container.style.width = `${w}px`;
-        container.style.height = `${h}px`;
-        document.body.appendChild(container);
-
-        let shader;
-        try {
-          shader = new ShaderMount(
-            container,
-            flutedGlassFragmentShader,
-            {
-              u_image: img,
-              u_colorBack: getShaderColorFromString('#00000000'),
-              u_colorShadow: getShaderColorFromString('#000000'),
-              u_colorHighlight: getShaderColorFromString('#ffffff'),
-              u_shadows: cfg.shadows,
-              u_highlights: cfg.highlights,
-              u_size: cfg.fluteSize,
-              u_shape: GlassGridShapes.lines,
-              u_angle: 0,
-              u_distortionShape: GlassDistortionShapes.prism,
-              u_distortion: cfg.distortion,
-              u_shift: 0,
-              u_stretch: 0,
-              u_blur: cfg.fluteBlur,
-              u_edges: 0,
-              u_marginLeft: 0, u_marginRight: 0, u_marginTop: 0, u_marginBottom: 0,
-              u_grainMixer: 0,
-              u_grainOverlay: 0,
-              u_fit: ShaderFitOptions.cover,
-              u_scale: 1,
-              u_rotation: 0,
-              u_originX: 0.5,
-              u_originY: 0.5,
-              u_offsetX: 0,
-              u_offsetY: 0,
-              u_worldWidth: 0,
-              u_worldHeight: 0,
-            },
-            { preserveDrawingBuffer: true },
-            0, 0, 1, w*h
-          );
-
-          await waitForCanvasResize(shader.canvasElement, w, h);
-          const outCanvas = document.createElement('canvas');
-          outCanvas.width = w; outCanvas.height = h;
-          outCanvas.getContext('2d').drawImage(shader.canvasElement, 0, 0, w, h);
-          resolve(outCanvas);
-        } catch (err) {
-          reject(err);
-        } finally {
-          if(shader) shader.dispose();
-          container.remove();
-          URL.revokeObjectURL(url);
-        }
-      };
-      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Color field image failed to load')); };
-      img.src = url;
-    }, 'image/png');
-  });
+function shaderUniforms(cfg){
+  return {
+    u_shadows: cfg.shadows,
+    u_highlights: cfg.highlights,
+    u_size: cfg.fluteSize,
+    u_distortion: cfg.distortion,
+    u_blur: cfg.fluteBlur,
+  };
 }
 
-// Renders a config to a brand new w x h canvas.
-function renderToCanvas(w, h, cfg){
-  return applyFlutedGlass(buildColorField(w, h, cfg), w, h, cfg);
+// ShaderMount only accepts a loaded <img> for u_image, so a mount is created
+// with this 1x1 placeholder and the real color field is uploaded afterwards.
+const PLACEHOLDER_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+
+// Creates a FlutedGlass ShaderMount in a hidden w x h container.
+async function createShaderMount(w, h){
+  const img = new Image();
+  img.src = PLACEHOLDER_IMAGE_SRC;
+  await img.decode();
+
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-99999px';
+  container.style.top = '0';
+  container.style.width = `${w}px`;
+  container.style.height = `${h}px`;
+  document.body.appendChild(container);
+
+  try {
+    const mount = new ShaderMount(
+      container,
+      flutedGlassFragmentShader,
+      {
+        u_image: img,
+        u_colorBack: getShaderColorFromString('#00000000'),
+        u_colorShadow: getShaderColorFromString('#000000'),
+        u_colorHighlight: getShaderColorFromString('#ffffff'),
+        ...shaderUniforms(state),
+        u_shape: GlassGridShapes.lines,
+        u_angle: 0,
+        u_distortionShape: GlassDistortionShapes.prism,
+        u_shift: 0,
+        u_stretch: 0,
+        u_edges: 0,
+        u_marginLeft: 0, u_marginRight: 0, u_marginTop: 0, u_marginBottom: 0,
+        u_grainMixer: 0,
+        u_grainOverlay: 0,
+        u_fit: ShaderFitOptions.cover,
+        u_scale: 1,
+        u_rotation: 0,
+        u_originX: 0.5,
+        u_originY: 0.5,
+        u_offsetX: 0,
+        u_offsetY: 0,
+        u_worldWidth: 0,
+        u_worldHeight: 0,
+      },
+      { preserveDrawingBuffer: true },
+      0, 0, 1, w*h
+    );
+    await waitForCanvasResize(mount.canvasElement, w, h);
+    return { mount, container };
+  } catch (err) {
+    container.remove();
+    throw err;
+  }
+}
+
+function disposeShaderMount({ mount, container }){
+  mount.dispose();
+  container.remove();
+}
+
+// Draws a color field through the shader and returns a copy of the result.
+// Instead of PNG-encoding the field into an <img> (the only input
+// ShaderMount's API takes), the canvas is uploaded straight into the mount's
+// existing u_image texture. This reaches into ShaderMount internals (gl,
+// textures, textureUnitMap, uniformLocations) from @paper-design/shaders
+// 0.0.77; re-check this if that package is upgraded.
+function drawWithShader({ mount }, field, cfg){
+  const { gl } = mount;
+  if(gl.isContextLost()) throw new Error('WebGL context lost');
+  gl.useProgram(mount.program);
+  gl.activeTexture(gl.TEXTURE0 + mount.textureUnitMap.get('u_image'));
+  gl.bindTexture(gl.TEXTURE_2D, mount.textures.get('u_image'));
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, field);
+  gl.uniform1f(mount.uniformLocations.u_imageAspectRatio, field.width / field.height);
+  mount.setUniforms(shaderUniforms(cfg)); // also renders synchronously
+
+  const out = document.createElement('canvas');
+  out.width = field.width; out.height = field.height;
+  out.getContext('2d').drawImage(mount.canvasElement, 0, 0);
+  return out;
+}
+
+// Long-lived mounts for the sizes rendered over and over (preview per
+// device, gallery thumbnails), keyed by "WxH". Stored as promises so two
+// callers asking for the same new size share one mount. Once a mount
+// exists, drawWithShader() is fully synchronous, so callers can never
+// interleave on the same mount.
+const shaderMounts = new Map();
+
+async function getShaderMount(w, h){
+  const key = `${w}x${h}`;
+  let entry = shaderMounts.get(key);
+  if(entry){
+    const existing = await entry.catch(()=>null);
+    if(existing && !existing.mount.gl.isContextLost()) return existing;
+    if(existing) disposeShaderMount(existing);
+    shaderMounts.delete(key);
+  }
+  entry = createShaderMount(w, h);
+  shaderMounts.set(key, entry);
+  return entry;
+}
+
+// Renders a config to a brand new w x h canvas, reusing a cached mount.
+async function renderToCanvas(w, h, cfg){
+  const mount = await getShaderMount(w, h);
+  return drawWithShader(mount, buildColorField(w, h, cfg), cfg);
+}
+
+// Full-resolution exports are rare and large (up to ~23 MP), so they get a
+// throwaway mount rather than holding that much GPU memory for the session.
+async function renderOnce(w, h, cfg){
+  const mount = await createShaderMount(w, h);
+  try {
+    return drawWithShader(mount, buildColorField(w, h, cfg), cfg);
+  } finally {
+    disposeShaderMount(mount);
+  }
 }
 
 // Pure calculation only -- does NOT touch the DOM. Assigning to
@@ -311,10 +361,14 @@ function applySavedSettings(saved){
   if(saved.paletteName) state.paletteName = saved.paletteName;
 }
 
+// Debounced: electron-store writes to disk synchronously, and renders are
+// now fast enough that saving after every one would mean dozens of disk
+// writes per second during a slider drag.
+let saveSettingsTimer;
 function saveCurrentSettings(){
-  if(window.electronAPI?.saveSettings){
-    window.electronAPI.saveSettings(state);
-  }
+  if(!window.electronAPI?.saveSettings) return;
+  clearTimeout(saveSettingsTimer);
+  saveSettingsTimer = setTimeout(()=> window.electronAPI.saveSettings(state), 400);
 }
 
 // ---- controls wiring ----
@@ -484,7 +538,7 @@ async function saveWallpaper(cfg){
   await new Promise(r=>setTimeout(r, 30));
   try {
     const d = DEVICES[cfg.device];
-    const blob = await canvasToPngBlob(await renderToCanvas(d.w, d.h, cfg));
+    const blob = await canvasToPngBlob(await renderOnce(d.w, d.h, cfg));
     const suggestedName = `flute-gradient-${cfg.paletteName.toLowerCase().replace(/\s+/g,'-')}-${cfg.device}.png`;
 
     if(window.electronAPI){
