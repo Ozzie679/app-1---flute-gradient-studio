@@ -91,5 +91,4 @@ Your last-used settings are remembered between launches via `electron-store`.
 
 ## Ideas for next iterations
 
-- Pick one of the layout mockups (full-bleed canvas / inspector) if Option A
-  ever feels limiting
+- Lock-screen preview for iPad (widgets row) and a home-screen preview

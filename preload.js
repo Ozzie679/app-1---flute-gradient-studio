@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_event, status) => callback(status)),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  setFullScreen: (on) => ipcRenderer.invoke('set-fullscreen', on),
+  onFullScreenChange: (callback) => ipcRenderer.on('fullscreen-changed', (_event, isFull) => callback(isFull)),
 });
