@@ -10,106 +10,120 @@
 
 <header>
   <h1>Flute Gradient Studio <span class="beta-badge">Beta</span></h1>
-  <p>Generate original fluted-glass gradient wallpapers &mdash; pick colors, shuffle, save in Mac / iPad / iPhone resolution.</p>
+  <p>Original fluted-glass gradient wallpapers for Mac, iPad and iPhone.</p>
 </header>
 
 <div class="layout">
-  <div class="panel">
+  <aside class="panel">
+    <div class="panel-scroll">
 
-    <div class="group">
-      <div class="group-label">Palette presets</div>
-      <div class="swatch-row" id="paletteRow"></div>
+      <section class="section">
+        <h2 class="section-title">Colour</h2>
+
+        <div class="group">
+          <div class="group-label">Palette presets</div>
+          <div class="swatch-row" id="paletteRow"></div>
+        </div>
+
+        <div class="group">
+          <div class="group-label">Gradient colours</div>
+          <div class="colors-row">
+            <label class="color-input-wrap"><span>Start</span><input type="color" id="colorA"></label>
+            <label class="color-input-wrap"><span>Mid</span><input type="color" id="colorB"></label>
+            <label class="color-input-wrap"><span>End</span><input type="color" id="colorC"></label>
+          </div>
+        </div>
+
+        <div class="group">
+          <label class="group-label" for="angle">Angle <span class="val mono" id="angleVal"></span></label>
+          <input type="range" id="angle" min="0" max="180" step="1">
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title-row">
+          <h2 class="section-title">Glow</h2>
+          <input type="checkbox" class="switch" id="glowEnabled" aria-label="Glow highlight" checked>
+        </div>
+
+        <div id="glowControls">
+          <div class="group glow-row">
+            <label class="color-input-wrap glow-color"><span>Colour</span><input type="color" id="glowColor"></label>
+            <label class="color-input-wrap glow-pos"><span>Position</span>
+              <select id="glowPos" class="select-field">
+                <option value="tl">Top left</option>
+                <option value="tr">Top right</option>
+                <option value="bl">Bottom left</option>
+                <option value="br">Bottom right</option>
+                <option value="c">Center</option>
+              </select>
+            </label>
+          </div>
+          <div class="group">
+            <label class="group-label" for="glowOpacity">Strength <span class="val mono" id="glowOpacityVal"></span></label>
+            <input type="range" id="glowOpacity" min="5" max="70" step="1">
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section-title">Glass</h2>
+
+        <div class="group">
+          <label class="group-label" for="fluteSize">Flute size <span class="val mono" id="fluteSizeVal"></span></label>
+          <input type="range" id="fluteSize" min="0.4" max="0.8" step="0.01">
+        </div>
+        <div class="group">
+          <label class="group-label" for="fluteBlur">Flute blur <span class="val mono" id="fluteBlurVal"></span></label>
+          <input type="range" id="fluteBlur" min="0" max="0.6" step="0.01">
+        </div>
+        <div class="group">
+          <label class="group-label" for="distortion">Distortion <span class="val mono" id="distortionVal"></span></label>
+          <input type="range" id="distortion" min="0" max="0.5" step="0.01">
+        </div>
+        <div class="group">
+          <label class="group-label" for="shadows">Shadow depth <span class="val mono" id="shadowsVal"></span></label>
+          <input type="range" id="shadows" min="0" max="0.6" step="0.01">
+        </div>
+        <div class="group">
+          <label class="group-label" for="highlights">Highlight strength <span class="val mono" id="highlightsVal"></span></label>
+          <input type="range" id="highlights" min="0" max="0.35" step="0.01">
+        </div>
+      </section>
+
     </div>
 
-    <div class="group">
-      <div class="group-label">Gradient colors</div>
-      <div class="colors-row">
-        <div class="color-input-wrap"><label>Start</label><input type="color" id="colorA"></div>
-        <div class="color-input-wrap"><label>Mid</label><input type="color" id="colorB"></div>
-        <div class="color-input-wrap"><label>End</label><input type="color" id="colorC"></div>
-      </div>
-    </div>
-
-    <div class="group">
-      <div class="group-label">Angle <span class="val mono" id="angleVal"></span></div>
-      <input type="range" id="angle" min="0" max="180" step="1">
-    </div>
-
-    <div class="group">
-      <label class="checkbox-row"><input type="checkbox" id="glowEnabled" checked> Glow highlight</label>
-    </div>
-
-    <div class="group" id="glowControls">
-      <div class="colors-row" style="margin-bottom:12px;">
-        <div class="color-input-wrap"><label>Glow color</label><input type="color" id="glowColor"></div>
-      </div>
-      <div class="group-label">Glow position</div>
-      <select id="glowPos" class="mono select-field">
-        <option value="tl">Top left</option>
-        <option value="tr">Top right</option>
-        <option value="bl">Bottom left</option>
-        <option value="br">Bottom right</option>
-        <option value="c">Center</option>
-      </select>
-      <div class="group-label">Glow strength <span class="val mono" id="glowOpacityVal"></span></div>
-      <input type="range" id="glowOpacity" min="5" max="70" step="1">
-    </div>
-
-    <div class="group">
-      <div class="group-label">Shadow depth <span class="val mono" id="shadowsVal"></span></div>
-      <input type="range" id="shadows" min="0" max="0.6" step="0.01">
-    </div>
-
-    <div class="group">
-      <div class="group-label">Highlight strength <span class="val mono" id="highlightsVal"></span></div>
-      <input type="range" id="highlights" min="0" max="0.35" step="0.01">
-    </div>
-
-    <div class="group">
-      <div class="group-label">Flute size <span class="val mono" id="fluteSizeVal"></span></div>
-      <input type="range" id="fluteSize" min="0.4" max="0.8" step="0.01">
-    </div>
-
-    <div class="group">
-      <div class="group-label">Distortion <span class="val mono" id="distortionVal"></span></div>
-      <input type="range" id="distortion" min="0" max="0.5" step="0.01">
-    </div>
-
-    <div class="group">
-      <div class="group-label">Flute blur <span class="val mono" id="fluteBlurVal"></span></div>
-      <input type="range" id="fluteBlur" min="0" max="0.6" step="0.01">
-    </div>
-
-    <div class="group">
-      <div class="group-label">Device</div>
-      <div class="seg" id="deviceSeg">
-        <button data-device="desktop" class="active">Desktop</button>
+    <div class="panel-footer">
+      <div class="seg" id="deviceSeg" role="group" aria-label="Device">
+        <button data-device="desktop" class="active">Mac</button>
         <button data-device="ipad">iPad</button>
         <button data-device="iphone">iPhone</button>
       </div>
+      <div class="btn-row">
+        <button class="btn" id="shuffleBtn">Shuffle</button>
+        <button class="btn primary" id="downloadBtn">Save PNG</button>
+      </div>
+      <div class="loading-note" id="loadingNote" role="status"></div>
     </div>
+  </aside>
 
-    <div class="btn-row">
-      <button class="btn" id="shuffleBtn">🎲 Shuffle</button>
-      <button class="btn primary" id="downloadBtn">Save PNG</button>
+  <main class="stage">
+    <div class="preview-wrap">
+      <canvas id="main"></canvas>
     </div>
-    <div class="loading-note" id="loadingNote"></div>
-
-  </div>
-
-  <div class="stage">
-    <canvas id="main"></canvas>
     <div class="stage-meta">
-      <span class="mono" id="paletteName">Custom</span>
+      <span id="paletteName">Custom</span>
       <span class="mono" id="resLabel"></span>
     </div>
 
-    <div class="gallery-head">
-      <h2>Quick variations</h2>
-      <button id="refreshGallery">↻ Refresh</button>
+    <div class="gallery-block">
+      <div class="gallery-head">
+        <h2>Quick variations</h2>
+        <button id="refreshGallery">↻ Refresh</button>
+      </div>
+      <div class="gallery" id="gallery"></div>
     </div>
-    <div class="gallery" id="gallery"></div>
-  </div>
+  </main>
 </div>
 
 <script type="module" src="app.js"></script>

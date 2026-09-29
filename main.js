@@ -20,6 +20,8 @@ function createWindow() {
     backgroundColor: '#0a0a0e',
     icon: appIcon,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    // Windows/Linux: hide the default File/Edit/View bar (Alt shows it).
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
