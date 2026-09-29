@@ -8,7 +8,7 @@ import {
 } from '../node_modules/@paper-design/shaders/dist/index.js';
 
 const DEVICES = {
-  desktop: { label:'Desktop (Mac)', w:6016, h:3900 },
+  desktop: { label:'Desktop (Mac)', w:6016, h:3384 }, // Apple Pro Display XDR (6K)
   ipad:    { label:'iPad',          w:2752, h:2064 },
   iphone:  { label:'iPhone',        w:1320, h:2868 }
 };
