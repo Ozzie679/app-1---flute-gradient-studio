@@ -56,8 +56,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Handles the "Download PNG" button: shows a native Save dialog and
-// writes the rendered wallpaper straight to disk.
+// Handles the "Save PNG" button: shows a native Save dialog and writes the
+// rendered wallpaper straight to disk.
 ipcMain.handle('save-wallpaper', async (_event, arrayBuffer, suggestedName) => {
   const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
     title: 'Save wallpaper',
@@ -67,6 +67,11 @@ ipcMain.handle('save-wallpaper', async (_event, arrayBuffer, suggestedName) => {
 
   if (canceled || !filePath) return { success: false };
 
-  fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
-  return { success: true, filePath };
+  try {
+    await fs.promises.writeFile(filePath, Buffer.from(arrayBuffer));
+    return { success: true, filePath };
+  } catch (err) {
+    // e.g. folder is read-only or the disk is full
+    return { success: false, error: err.message };
+  }
 });
