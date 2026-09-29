@@ -399,13 +399,22 @@ function syncControlsFromState(){
   document.querySelectorAll('#deviceSeg button').forEach(b=>{
     b.classList.toggle('active', b.dataset.device===state.device);
   });
+  document.body.dataset.device = state.device;
+  syncActivePalette();
+}
+
+function syncActivePalette(){
+  $('paletteName').textContent = state.paletteName;
+  document.querySelectorAll('#paletteRow .swatch').forEach(s=>{
+    s.classList.toggle('active', s.dataset.name===state.paletteName);
+  });
 }
 
 ['colorA','colorB','colorC'].forEach((id,i)=>{
   $(id).addEventListener('input', e=>{
     state.colors[i] = e.target.value;
     state.paletteName = 'Custom';
-    $('paletteName').textContent = 'Custom';
+    syncActivePalette();
     scheduleRender();
   });
 });
@@ -421,16 +430,24 @@ $('distortion').addEventListener('input', e=>{ state.distortion=+e.target.value;
 $('fluteBlur').addEventListener('input', e=>{ state.fluteBlur=+e.target.value; $('fluteBlurVal').textContent=state.fluteBlur.toFixed(2); scheduleRender(); });
 
 document.querySelectorAll('#deviceSeg button').forEach(b=>{
-  b.addEventListener('click', ()=>{ state.device=b.dataset.device; syncControlsFromState(); scheduleRender(); });
+  b.addEventListener('click', ()=>{
+    if(state.device === b.dataset.device) return;
+    state.device=b.dataset.device;
+    syncControlsFromState();
+    scheduleRender();
+    buildGallery({ reshuffle:false });
+  });
 });
 
 function buildPaletteRow(){
   const row = $('paletteRow');
   row.innerHTML='';
   PALETTES.forEach((p)=>{
-    const el = document.createElement('div');
+    const el = document.createElement('button');
     el.className='swatch';
     el.title = p.name;
+    el.dataset.name = p.name;
+    el.setAttribute('aria-label', `${p.name} palette`);
     el.style.background = `linear-gradient(135deg, ${p.colors[0]}, ${p.colors[1]}, ${p.colors[2]})`;
     el.addEventListener('click', ()=>{
       state.colors=[...p.colors];
@@ -448,11 +465,11 @@ function randomInRange(min, max, decimals=2){
   const v = min + Math.random()*(max-min);
   return parseFloat(v.toFixed(decimals));
 }
+// Everything a wallpaper looks like, independent of which device it's for.
 function randomCfg(){
   const p = randomFrom(PALETTES);
   const posKeys = Object.keys(GLOW_POS);
   return {
-    device: state.device,
     colors:[...p.colors],
     angle: Math.round(70 + Math.random()*70),
     glowEnabled: Math.random()>0.15,
@@ -478,41 +495,51 @@ $('shuffleBtn').addEventListener('click', ()=>{
 // Bumped on every rebuild so a slower, older build stops adding thumbnails
 // once a newer one has started (e.g. Refresh clicked twice quickly).
 let galleryBuildId = 0;
+// Kept between rebuilds so switching device re-renders the same six
+// variations in the new shape instead of shuffling them.
+let galleryCfgs = [];
 
-async function buildGallery(){
+async function buildGallery({ reshuffle = true } = {}){
   const buildId = ++galleryBuildId;
-  const gal = $('gallery');
-  gal.innerHTML='';
-  for(let i=0;i<6;i++){
-    const cfg = randomCfg();
-    let thumbCanvas;
+  if(reshuffle || galleryCfgs.length === 0){
+    galleryCfgs = Array.from({ length:6 }, randomCfg);
+  }
+  const { w, h } = computeDeviceCanvasSize(state.device, 240);
+
+  // Render all six first and swap them in together, so the row doesn't
+  // collapse and re-grow while it rebuilds.
+  const thumbs = [];
+  for(const cfg of galleryCfgs){
     try {
-      thumbCanvas = await renderToCanvas(240, 150, cfg);
+      thumbs.push({ cfg, canvas: await renderToCanvas(w, h, cfg) });
     } catch (err) {
       console.error('Gallery thumbnail failed:', err);
-      continue;
     }
     if(buildId !== galleryBuildId) return;
+  }
 
+  $('gallery').replaceChildren(...thumbs.map(({ cfg, canvas })=>{
     const wrap = document.createElement('div');
     wrap.className='thumb';
-    wrap.appendChild(thumbCanvas);
+    wrap.title = cfg.paletteName;
+    wrap.appendChild(canvas);
 
     const dl = document.createElement('div');
     dl.className='dl';
+    dl.title = 'Save this variation';
     dl.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>';
-    dl.addEventListener('click', (ev)=>{ ev.stopPropagation(); saveWallpaper(cfg); });
+    dl.addEventListener('click', (ev)=>{ ev.stopPropagation(); saveWallpaper({ ...cfg, device: state.device }); });
     wrap.appendChild(dl);
 
     wrap.addEventListener('click', ()=>{
-      state = {...state, ...cfg};
+      state = { ...state, ...cfg, colors:[...cfg.colors] };
       syncControlsFromState();
       scheduleRender();
     });
-    gal.appendChild(wrap);
-  }
+    return wrap;
+  }));
 }
-$('refreshGallery').addEventListener('click', buildGallery);
+$('refreshGallery').addEventListener('click', ()=> buildGallery());
 
 // ---- save / export ----
 // Renders the config at full device resolution, then hands the PNG bytes
@@ -520,10 +547,13 @@ $('refreshGallery').addEventListener('click', buildGallery);
 // browser download if electronAPI isn't present (e.g. testing index.html
 // directly in a browser tab).
 let noteTimer;
-function showNote(text, clearAfterMs){
+function showNote(text, clearAfterMs, tone = ''){
   clearTimeout(noteTimer);
-  $('loadingNote').textContent = text;
-  if(clearAfterMs) noteTimer = setTimeout(()=>{ $('loadingNote').textContent=''; }, clearAfterMs);
+  const note = $('loadingNote');
+  note.textContent = text;
+  note.className = `loading-note ${tone}`;
+  note.title = text;
+  if(clearAfterMs) noteTimer = setTimeout(()=>{ note.textContent=''; note.className='loading-note'; }, clearAfterMs);
 }
 
 function canvasToPngBlob(canvas){
@@ -533,7 +563,11 @@ function canvasToPngBlob(canvas){
 }
 
 async function saveWallpaper(cfg){
-  showNote('Rendering full resolution…');
+  const btn = $('downloadBtn');
+  if(btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Rendering…';
+  showNote(`Rendering ${DEVICES[cfg.device].w} × ${DEVICES[cfg.device].h}…`);
   // Give the note a moment to paint before the heavy render blocks the page.
   await new Promise(r=>setTimeout(r, 30));
   try {
@@ -542,26 +576,32 @@ async function saveWallpaper(cfg){
     const suggestedName = `flute-gradient-${cfg.paletteName.toLowerCase().replace(/\s+/g,'-')}-${cfg.device}.png`;
 
     if(window.electronAPI){
+      btn.textContent = 'Save PNG';
       const result = await window.electronAPI.saveWallpaper(await blob.arrayBuffer(), suggestedName);
-      if(result.success) showNote(`Saved: ${result.filePath}`, 3000);
-      else if(result.error) showNote(`Couldn't save: ${result.error}`, 6000);
+      if(result.success) showNote(`✓ Saved ${result.filePath.split(/[\\/]/).pop()}`, 4000, 'ok');
+      else if(result.error) showNote(`Couldn't save: ${result.error}`, 8000, 'err');
       else showNote('');
     } else {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = suggestedName;
       a.click();
-      showNote('Downloaded', 3000);
+      showNote('✓ Downloaded', 4000, 'ok');
     }
   } catch (err) {
     console.error('Save failed:', err);
-    showNote(`Couldn't render wallpaper: ${err.message}`, 6000);
+    showNote(`Couldn't render wallpaper: ${err.message}`, 8000, 'err');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save PNG';
   }
 }
-$('downloadBtn').addEventListener('click', ()=> saveWallpaper(state));
+// Snapshot state so moving a slider mid-save can't change the export.
+$('downloadBtn').addEventListener('click', ()=> saveWallpaper({ ...state, colors:[...state.colors] }));
 
 // ---- init ----
 async function init(){
+  if(window.electronAPI?.platform) document.body.classList.add(`platform-${window.electronAPI.platform}`);
   if(window.electronAPI?.getSettings){
     const saved = await window.electronAPI.getSettings();
     applySavedSettings(saved);
