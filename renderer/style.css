@@ -76,6 +76,33 @@ header p{
   text-overflow:ellipsis;
 }
 
+.update-banner{
+  margin-left:auto;
+  align-self:center;
+  flex:none;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:4px 4px 4px 12px;
+  border-radius:999px;
+  border:1px solid var(--line-strong);
+  background:var(--panel-2);
+  font-size:12px;
+  -webkit-app-region: no-drag;
+}
+.update-banner[hidden]{ display:none; }
+.update-banner button{
+  border:none;
+  border-radius:999px;
+  padding:5px 12px;
+  background:var(--accent-grad);
+  color:#fff;
+  font-size:12px;
+  font-weight:600;
+  font-family:inherit;
+  cursor:pointer;
+}
+
 /* ---- layout: panel + stage fill the window; only the controls scroll ---- */
 .layout{
   flex:1;

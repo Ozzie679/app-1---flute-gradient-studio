@@ -36,12 +36,48 @@ folder:
 electron-builder auto-detects your current OS and builds for that platform.
 The first run downloads some extra tooling and can take a minute or two.
 
+## Releasing a new version
+
+1. Bump `"version"` in `package.json` (e.g. `1.0.0-beta.3` → `1.0.0-beta.4`)
+   and merge that to `master`.
+2. Tag that commit with the same version and push the tag:
+
+   ```bash
+   git tag v1.0.0-beta.4
+   git push origin v1.0.0-beta.4
+   ```
+
+GitHub Actions then builds the Mac `.dmg` and Windows `.exe` and attaches
+them to a GitHub Release for that tag. The build stops with an error if the
+tag and `package.json` version don't match.
+
+## Updates
+
+Installed copies check GitHub Releases a few seconds after launch:
+
+- **Windows:** the update downloads in the background, then a
+  "Restart to update" button appears (it also installs on the next quit).
+- **macOS:** a "Version X is available · Download" button appears and opens
+  the new `.dmg`. Drag the app into Applications and choose **Replace**.
+  Settings are kept either way.
+
+## Installing (for friends)
+
+The app isn't code-signed (that costs money), so the first launch shows a
+warning:
+
+- **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
+- **macOS:** "can't be opened" → open **System Settings → Privacy &
+  Security**, scroll down and click **Open Anyway**. You may need to do this
+  again after installing each new version.
+
 ## Project structure
 
 ```
 flute-gradient-studio/
 ├── main.js             Electron main process (window, Save dialog, saved settings)
 ├── preload.js          Secure bridge between renderer and main process
+├── updater.js          Update checks against GitHub Releases
 ├── package.json        Scripts + electron-builder config
 ├── build/              App icons (icon.icns / icon.ico / icon.png)
 ├── .github/workflows/  CI builds for macOS (.dmg) and Windows (.exe)
@@ -55,5 +91,5 @@ Your last-used settings are remembered between launches via `electron-store`.
 
 ## Ideas for next iterations
 
-- Interface polish and performance improvements
-- Auto-update support via `electron-builder`'s publish config + GitHub Releases
+- Pick one of the layout mockups (full-bleed canvas / inspector) if Option A
+  ever feels limiting

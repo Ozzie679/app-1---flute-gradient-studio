@@ -599,6 +599,31 @@ async function saveWallpaper(cfg){
 // Snapshot state so moving a slider mid-save can't change the export.
 $('downloadBtn').addEventListener('click', ()=> saveWallpaper({ ...state, colors:[...state.colors] }));
 
+// ---- updates ----
+// 'ready' (Windows/Linux): already downloaded, restart installs it.
+// 'available' (macOS): opens the .dmg download to install by hand.
+function showUpdate(status){
+  if(!status) return;
+  const btn = $('updateBtn');
+  if(status.state === 'ready'){
+    $('updateText').textContent = `Version ${status.version} is ready`;
+    btn.textContent = 'Restart to update';
+    btn.onclick = ()=> window.electronAPI.installUpdate();
+  } else if(status.state === 'available'){
+    $('updateText').textContent = `Version ${status.version} is available`;
+    btn.textContent = 'Download';
+    btn.onclick = ()=> window.electronAPI.downloadUpdate();
+  } else {
+    return;
+  }
+  $('updateBanner').hidden = false;
+}
+
+if(window.electronAPI?.onUpdateStatus){
+  window.electronAPI.onUpdateStatus(showUpdate);
+  window.electronAPI.getUpdateStatus().then(showUpdate);
+}
+
 // ---- init ----
 async function init(){
   if(window.electronAPI?.platform) document.body.classList.add(`platform-${window.electronAPI.platform}`);
