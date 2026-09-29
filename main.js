@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { initUpdater } = require('./updater');
 
 let mainWindow;
 let store;
@@ -48,6 +49,7 @@ app.whenReady().then(async () => {
   });
 
   createWindow();
+  initUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

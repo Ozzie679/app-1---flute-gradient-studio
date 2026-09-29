@@ -18,6 +18,18 @@ jobs:
         with:
           node-version: 24
 
+      # Installed copies compare their own version with the release tag, so a
+      # mismatch would make the app offer the same update forever.
+      - name: Check tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$PKG" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG. Bump the version in package.json first."
+            exit 1
+          fi
+
       - run: npm install
 
       - run: npm run dist -- --publish never

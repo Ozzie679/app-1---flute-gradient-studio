@@ -1,6 +1,6 @@
 {
   "name": "flute-gradient-studio",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.3",
   "description": "Generate original fluted-glass gradient wallpapers for Mac, iPad, and iPhone.",
   "main": "main.js",
   "author": "Orion",
@@ -19,22 +19,35 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "renderer/**/*",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Ozzie679",
+        "repo": "app-1---flute-gradient-studio"
+      }
     ],
     "mac": {
       "category": "public.app-category.graphics-design",
       "target": "dmg",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "Flute-Gradient-Studio-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis",
       "icon": "build/icon.png",
       "signAndEditExecutable": true
     },
+    "nsis": {
+      "artifactName": "Flute-Gradient-Studio-Setup-${version}.${ext}"
+    },
     "linux": {
       "target": "AppImage",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "artifactName": "Flute-Gradient-Studio-${version}.${ext}"
     }
   },
   "allowScripts": {
@@ -42,6 +55,8 @@
   },
   "dependencies": {
     "@paper-design/shaders": "^0.0.77",
-    "electron-store": "^11.0.2"
+    "electron-store": "^11.0.2",
+    "electron-updater": "~6.2.1",
+    "semver": "^7.8.5"
   }
 }
