@@ -40,19 +40,20 @@ The first run downloads some extra tooling and can take a minute or two.
 
 ```
 flute-gradient-studio/
-├── main.js            Electron main process (creates the window, handles Save dialog)
+├── main.js             Electron main process (window, Save dialog, saved settings)
 ├── preload.js          Secure bridge between renderer and main process
 ├── package.json        Scripts + electron-builder config
+├── build/              App icons (icon.icns / icon.ico / icon.png)
+├── .github/workflows/  CI builds for macOS (.dmg) and Windows (.exe)
 └── renderer/
-    ├── index.html       App UI
-    ├── style.css         App styling
-    └── app.js            Gradient generator logic + controls
+    ├── index.html      App UI
+    ├── style.css       App styling
+    └── app.js          Gradient generator logic + controls
 ```
+
+Your last-used settings are remembered between launches via `electron-store`.
 
 ## Ideas for next iterations
 
-- Custom app icon (drop `icon.icns` / `icon.ico` / `icon.png` in the project
-  root and point to them under `build` in `package.json`)
-- A "Save all 6 variations at once" button
-- Remember last-used settings between launches (`electron-store`)
-- Auto-update support via `electron-builder`'s publish config
+- Interface polish and performance improvements
+- Auto-update support via `electron-builder`'s publish config + GitHub Releases
