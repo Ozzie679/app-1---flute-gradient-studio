@@ -7,8 +7,6 @@ import {
   ShaderFitOptions,
 } from '../node_modules/@paper-design/shaders/dist/index.js';
 
-console.log('[app.js] module imported successfully, script is running');
-
 const DEVICES = {
   desktop: { label:'Desktop (Mac)', w:6016, h:3900 },
   ipad:    { label:'iPad',          w:2752, h:2064 },
@@ -49,16 +47,10 @@ let state = {
 const mainCanvas = document.getElementById('main');
 const mainCtx = mainCanvas.getContext('2d');
 
-// Serialize-and-queue lock for the main preview render pipeline. Since
-// applyFlutedGlass() is async (toBlob -> Image load -> ShaderMount ->
-// resize wait), a fast slider drag can call scheduleRender() many times
-// before the in-flight render finishes. Letting those pipelines run
-// concurrently is what caused the flicker: several full render pipelines
-// racing to draw, with last-write-wins deciding what ends up on screen.
-// Instead, at most one render runs at a time. Any input that arrives while
-// a render is in flight just sets renderQueued; runRenderLoop() picks up
-// whatever `state` looks like *after* the current render finishes and does
-// exactly one follow-up pass, no matter how many inputs stacked up.
+// At most one preview render runs at a time. Rendering is async, so a fast
+// slider drag calls scheduleRender() many times mid-render; letting those
+// run concurrently caused flicker. Inputs that arrive during a render just
+// set renderQueued, and one follow-up pass picks up the latest `state`.
 let isRendering = false;
 let renderQueued = false;
 
@@ -70,13 +62,9 @@ function hexToRgba(hex, a){
   return `rgba(${r},${g},${b},${a})`;
 }
 
-// cxOverride/cyOverride let us compute the gradient axis against a taller
-// off-screen buffer (see buildColorField) while still treating w/h as the
-// logical, visible canvas size for the angle math.
-function gradientCoords(w,h,angleDeg,cxOverride,cyOverride){
+function gradientCoords(w,h,angleDeg){
   const a = angleDeg * Math.PI/180;
-  const cx = cxOverride!==undefined ? cxOverride : w/2;
-  const cy = cyOverride!==undefined ? cyOverride : h/2;
+  const cx = w/2, cy = h/2;
   const len = Math.sqrt(w*w+h*h)/2;
   return { x0:cx-Math.cos(a)*len, y0:cy-Math.sin(a)*len, x1:cx+Math.cos(a)*len, y1:cy+Math.sin(a)*len };
 }
@@ -95,36 +83,10 @@ function drawBlob(ctx, gx, gy, radius, color, opacity, blend){
   ctx.restore();
 }
 
-// A stable (non-random) seed derived from the palette/colors/glow position,
-// so the same settings always produce the same wave shape (no flicker while
-// dragging unrelated sliders like angle or band count), but different
-// palettes get visibly different wave curves.
-function seedFromCfg(cfg){
-  const s = `${cfg.paletteName}|${cfg.colors.join(',')}|${cfg.glowPos}`;
-  let h = 0;
-  for(let i=0;i<s.length;i++){ h = (h*31 + s.charCodeAt(i))|0; }
-  return Math.abs(h)%1000;
-}
-
-// Deterministic pseudo-random value per flute band index, used for subtle
-// natural brightness jitter between adjacent ridges (real fluted glass is
-// never perfectly uniform).
-function bandJitter(i){
-  const x = Math.sin(i*12.9898)*43758.5453;
-  return x - Math.floor(x);
-}
-
-// Builds the color layer BEFORE any warp is applied: a linear base gradient
-// plus two automatic accent blobs positioned in the gradient's transition
-// zone (not just re-coloring the start/end extremes), plus the user's glow
-// highlight. Everything here gets warped together afterwards, which is what
-// gives the glow and color regions their organic, non-linear edges instead
-// of a straight axis.
-//
-// The whole thing is built on a canvas taller than the final image (extra
-// "margin" above and below) so that when warpAndComposite() later shifts
-// columns up/down, it always has real pixels to sample from and never
-// exposes a transparent gap at the top/bottom edge.
+// Builds the flat color layer that the fluted-glass shader then distorts: a
+// linear base gradient, two automatic accent blobs in the gradient's
+// transition zone (so the middle isn't a straight blend), plus the user's
+// glow highlight.
 function buildColorField(w, h, cfg){
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
@@ -194,15 +156,12 @@ function waitForCanvasResize(canvas, expectedWidth, expectedHeight, timeoutMs = 
 // preview and gallery thumbnails to collide when both rendered around the
 // same time.
 function applyFlutedGlass(sourceCanvas, w, h, cfg){
-  console.log('[shader] applyFlutedGlass called', w, h);
   return new Promise((resolve, reject)=>{
     sourceCanvas.toBlob(blob=>{
-      console.log('[shader] toBlob fired, blob exists:', !!blob);
       if(!blob){ reject(new Error('Could not read color field canvas')); return; }
       const url = URL.createObjectURL(blob);
       const img = new Image();
       img.onload = async ()=>{
-        console.log('[shader] image loaded', img.naturalWidth, img.naturalHeight);
         const container = document.createElement('div');
         container.style.position = 'fixed';
         container.style.left = '-99999px';
@@ -213,7 +172,6 @@ function applyFlutedGlass(sourceCanvas, w, h, cfg){
 
         let shader;
         try {
-          console.log('[shader] constructing ShaderMount...');
           shader = new ShaderMount(
             container,
             flutedGlassFragmentShader,
@@ -250,16 +208,12 @@ function applyFlutedGlass(sourceCanvas, w, h, cfg){
             0, 0, 1, w*h
           );
 
-          console.log('[shader] ShaderMount constructed, canvas size before wait:', shader.canvasElement.width, shader.canvasElement.height);
           await waitForCanvasResize(shader.canvasElement, w, h);
-          console.log('[shader] canvas size after wait:', shader.canvasElement.width, shader.canvasElement.height);
           const outCanvas = document.createElement('canvas');
           outCanvas.width = w; outCanvas.height = h;
           outCanvas.getContext('2d').drawImage(shader.canvasElement, 0, 0, w, h);
-          console.log('[shader] pixels copied to output canvas, resolving');
           resolve(outCanvas);
         } catch (err) {
-          console.error('[shader] FAILED:', err, err?.message, err?.stack);
           reject(err);
         } finally {
           if(shader) shader.dispose();
@@ -267,28 +221,21 @@ function applyFlutedGlass(sourceCanvas, w, h, cfg){
           URL.revokeObjectURL(url);
         }
       };
-      img.onerror = (e)=>{ console.error('[shader] image onerror', e); URL.revokeObjectURL(url); reject(new Error('Color field image failed to load')); };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('Color field image failed to load')); };
       img.src = url;
     }, 'image/png');
   });
 }
 
-async function render(ctx, w, h, cfg){
-  console.log('[render] start', w, h);
-  const field = buildColorField(w, h, cfg);
-  console.log('[render] color field built');
-  const finalCanvas = await applyFlutedGlass(field, w, h, cfg);
-  console.log('[render] shader applied, drawing to destination canvas');
-  ctx.clearRect(0,0,w,h);
-  ctx.drawImage(finalCanvas, 0, 0, w, h);
-  console.log('[render] complete');
+// Renders a config to a brand new w x h canvas.
+function renderToCanvas(w, h, cfg){
+  return applyFlutedGlass(buildColorField(w, h, cfg), w, h, cfg);
 }
 
-// Pure calculation only -- does NOT touch the DOM. Splitting this out from
-// the old fitCanvasToDevice() is what fixes the black flash: assigning to
-// canvas.width/height clears the canvas bitmap even when you set it to the
-// value it already has (that's the HTML spec, not a bug), so we need to
-// know the target size *before* deciding whether a resize is even needed.
+// Pure calculation only -- does NOT touch the DOM. Assigning to
+// canvas.width/height clears the bitmap even when the value is unchanged,
+// so we need the target size *before* deciding whether a resize is needed
+// (otherwise the preview flashes black).
 function computeDeviceCanvasSize(device, maxDim){
   const d = DEVICES[device];
   const scale = Math.min(maxDim/d.w, maxDim/d.h);
@@ -298,12 +245,9 @@ function computeDeviceCanvasSize(device, maxDim){
 async function renderMain(){
   const { w, h } = computeDeviceCanvasSize(state.device, 900);
 
-  // All the expensive work happens on an offscreen canvas (buildColorField
-  // + applyFlutedGlass's own throwaway container/ShaderMount). mainCanvas,
-  // the one actually on screen, is not touched at all during this await --
-  // so whatever was already painted just stays there while this runs.
-  const field = buildColorField(w, h, state);
-  const finalCanvas = await applyFlutedGlass(field, w, h, state);
+  // All the expensive work happens offscreen. mainCanvas is not touched
+  // during this await, so the previous frame stays visible while it runs.
+  const finalCanvas = await renderToCanvas(w, h, state);
 
   // Only resize mainCanvas if the device actually changed size. On a
   // slider drag it never does, so this branch is skipped entirely and the
@@ -327,26 +271,27 @@ async function renderMain(){
   document.getElementById('paletteName').textContent = state.paletteName;
 }
 
-// Drains queued render requests one at a time. renderMain() always reads
-// live values straight off `state` (never a captured snapshot), so the
-// follow-up pass automatically reflects wherever the slider/control landed
-// last, even if several input events arrived while we were mid-render.
-async function runRenderLoop(){
+async function scheduleRender(){
   if(isRendering){
     renderQueued = true;
     return;
   }
   isRendering = true;
-  do {
-    renderQueued = false;
-    await renderMain();
-  } while(renderQueued);
-  isRendering = false;
+  try {
+    do {
+      renderQueued = false;
+      try {
+        await renderMain();
+      } catch (err) {
+        // Keep the previous frame and carry on; a failed render must not
+        // leave isRendering stuck, or the preview would freeze for good.
+        console.error('Preview render failed:', err);
+      }
+    } while(renderQueued);
+  } finally {
+    isRendering = false;
+  }
   saveCurrentSettings();
-}
-
-function scheduleRender(){
-  runRenderLoop();
 }
 
 function applySavedSettings(saved){
@@ -476,19 +421,28 @@ $('shuffleBtn').addEventListener('click', ()=>{
 });
 
 // ---- gallery ----
+// Bumped on every rebuild so a slower, older build stops adding thumbnails
+// once a newer one has started (e.g. Refresh clicked twice quickly).
+let galleryBuildId = 0;
+
 async function buildGallery(){
+  const buildId = ++galleryBuildId;
   const gal = $('gallery');
   gal.innerHTML='';
   for(let i=0;i<6;i++){
     const cfg = randomCfg();
+    let thumbCanvas;
+    try {
+      thumbCanvas = await renderToCanvas(240, 150, cfg);
+    } catch (err) {
+      console.error('Gallery thumbnail failed:', err);
+      continue;
+    }
+    if(buildId !== galleryBuildId) return;
+
     const wrap = document.createElement('div');
     wrap.className='thumb';
-    const c = document.createElement('canvas');
-    c.width=240; c.height=150;
-    const ctx = c.getContext('2d');
-    await render(ctx,240,150,cfg);
-    wrap.appendChild(c);
-    // ...rest of this function stays exactly the same
+    wrap.appendChild(thumbCanvas);
 
     const dl = document.createElement('div');
     dl.className='dl';
@@ -511,33 +465,44 @@ $('refreshGallery').addEventListener('click', buildGallery);
 // to Electron's native Save dialog (via preload.js). Falls back to a plain
 // browser download if electronAPI isn't present (e.g. testing index.html
 // directly in a browser tab).
-function saveWallpaper(cfg){
-  const note = $('loadingNote');
-  note.textContent = 'Rendering full resolution…';
-  setTimeout(async ()=>{
-    const d = DEVICES[cfg.device];
-    const off = document.createElement('canvas');
-    off.width = d.w; off.height = d.h;
-    const octx = off.getContext('2d');
-    await render(octx, d.w, d.h, cfg);
+let noteTimer;
+function showNote(text, clearAfterMs){
+  clearTimeout(noteTimer);
+  $('loadingNote').textContent = text;
+  if(clearAfterMs) noteTimer = setTimeout(()=>{ $('loadingNote').textContent=''; }, clearAfterMs);
+}
 
+function canvasToPngBlob(canvas){
+  return new Promise((resolve, reject)=>{
+    canvas.toBlob(blob=> blob ? resolve(blob) : reject(new Error('Could not encode PNG')), 'image/png');
+  });
+}
+
+async function saveWallpaper(cfg){
+  showNote('Rendering full resolution…');
+  // Give the note a moment to paint before the heavy render blocks the page.
+  await new Promise(r=>setTimeout(r, 30));
+  try {
+    const d = DEVICES[cfg.device];
+    const blob = await canvasToPngBlob(await renderToCanvas(d.w, d.h, cfg));
     const suggestedName = `flute-gradient-${cfg.paletteName.toLowerCase().replace(/\s+/g,'-')}-${cfg.device}.png`;
 
-    off.toBlob(async blob=>{
-      if(window.electronAPI){
-        const arrBuf = await blob.arrayBuffer();
-        const result = await window.electronAPI.saveWallpaper(arrBuf, suggestedName);
-        note.textContent = result.success ? `Saved: ${result.filePath}` : '';
-      } else {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = suggestedName;
-        a.click();
-        note.textContent = 'Downloaded';
-      }
-      setTimeout(()=>{ note.textContent=''; }, 3000);
-    }, 'image/png');
-  }, 30);
+    if(window.electronAPI){
+      const result = await window.electronAPI.saveWallpaper(await blob.arrayBuffer(), suggestedName);
+      if(result.success) showNote(`Saved: ${result.filePath}`, 3000);
+      else if(result.error) showNote(`Couldn't save: ${result.error}`, 6000);
+      else showNote('');
+    } else {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = suggestedName;
+      a.click();
+      showNote('Downloaded', 3000);
+    }
+  } catch (err) {
+    console.error('Save failed:', err);
+    showNote(`Couldn't render wallpaper: ${err.message}`, 6000);
+  }
 }
 $('downloadBtn').addEventListener('click', ()=> saveWallpaper(state));
 
