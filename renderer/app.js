@@ -249,25 +249,28 @@ function drawWithShader({ mount }, field, cfg){
 // callers asking for the same new size share one mount. Once a mount
 // exists, drawWithShader() is fully synchronous, so callers can never
 // interleave on the same mount.
+// One mount per role ('preview', 'thumb'). The preview size follows the
+// window, so a new size replaces the old mount instead of piling up WebGL
+// contexts (browsers cap how many can be alive at once).
 const shaderMounts = new Map();
 
-async function getShaderMount(w, h){
-  const key = `${w}x${h}`;
-  let entry = shaderMounts.get(key);
+async function getShaderMount(role, w, h){
+  const entry = shaderMounts.get(role);
   if(entry){
-    const existing = await entry.catch(()=>null);
-    if(existing && !existing.mount.gl.isContextLost()) return existing;
+    const existing = await entry.promise.catch(()=>null);
+    if(existing && entry.w === w && entry.h === h && !existing.mount.gl.isContextLost()) return existing;
+    if(shaderMounts.get(role) !== entry) return getShaderMount(role, w, h); // replaced while we waited
     if(existing) disposeShaderMount(existing);
-    shaderMounts.delete(key);
+    shaderMounts.delete(role);
   }
-  entry = createShaderMount(w, h);
-  shaderMounts.set(key, entry);
-  return entry;
+  const promise = createShaderMount(w, h);
+  shaderMounts.set(role, { w, h, promise });
+  return promise;
 }
 
-// Renders a config to a brand new w x h canvas, reusing a cached mount.
-async function renderToCanvas(w, h, cfg){
-  const mount = await getShaderMount(w, h);
+// Renders a config to a brand new w x h canvas, reusing the role's mount.
+async function renderToCanvas(role, w, h, cfg){
+  const mount = await getShaderMount(role, w, h);
   return drawWithShader(mount, buildColorField(w, h, cfg), cfg);
 }
 
@@ -292,12 +295,61 @@ function computeDeviceCanvasSize(device, maxDim){
   return { w: Math.round(d.w*scale), h: Math.round(d.h*scale) };
 }
 
+// ---- layout: where the wallpaper sits in the window ----
+// Mac fills the window edge to edge (cropping slightly, like macOS "Fill
+// Screen"). iPad/iPhone sit in a device-shaped frame centred in the space
+// the floating controls leave free, over a blurred copy of the wallpaper.
+const frameEl = document.getElementById('frame');
+const backdropCanvas = document.getElementById('backdrop');
+let immersive = false;
+
+function freeArea(){
+  const W = innerWidth, H = innerHeight;
+  // Full-screen view: leave room at the bottom for the pop-up control bar.
+  if(immersive) return { x:32, y:32, w:W-64, h:H-32-96 };
+  const panel = document.querySelector('.panel').getBoundingClientRect();
+  const left = panel.right + 24;
+  const top = 72, bottom = 108;
+  return { x:left, y:top, w:Math.max(120, W-left-24), h:Math.max(120, H-top-bottom) };
+}
+
+function frameRect(){
+  if(state.device === 'desktop') return { x:0, y:0, w:innerWidth, h:innerHeight, radius:0 };
+  const d = DEVICES[state.device];
+  const a = freeArea();
+  const s = Math.min(a.w/d.w, a.h/d.h);
+  const w = Math.round(d.w*s), h = Math.round(d.h*s);
+  // Rounded corners roughly matching the real devices' screens.
+  const radius = Math.round(w * (state.device === 'iphone' ? 0.14 : 0.045));
+  return { x:Math.round(a.x + (a.w-w)/2), y:Math.round(a.y + (a.h-h)/2), w, h, radius };
+}
+
+function layoutFrame(){
+  const r = frameRect();
+  Object.assign(frameEl.style, { left:`${r.x}px`, top:`${r.y}px`, width:`${r.w}px`, height:`${r.h}px`, borderRadius:`${r.radius}px` });
+  frameEl.style.setProperty('--frame-w', `${r.w}px`);
+  frameEl.classList.toggle('device', state.device !== 'desktop');
+  frameEl.classList.toggle('ipad', state.device === 'ipad');
+}
+
+// Preview pixel size: enough to cover the frame at the screen's pixel
+// density, capped, and rounded to 100 px steps so small window resizes
+// don't force a new shader mount every time.
+function previewSize(){
+  const r = frameRect();
+  const d = DEVICES[state.device];
+  const cssScale = Math.max(r.w/d.w, r.h/d.h);
+  const longest = Math.max(d.w, d.h) * cssScale * Math.min(devicePixelRatio || 1, 2);
+  const maxDim = Math.min(2400, Math.max(600, Math.ceil(longest/100)*100));
+  return computeDeviceCanvasSize(state.device, maxDim);
+}
+
 async function renderMain(){
-  const { w, h } = computeDeviceCanvasSize(state.device, 900);
+  const { w, h } = previewSize();
 
   // All the expensive work happens offscreen. mainCanvas is not touched
   // during this await, so the previous frame stays visible while it runs.
-  const finalCanvas = await renderToCanvas(w, h, state);
+  const finalCanvas = await renderToCanvas('preview', w, h, state);
 
   // Only resize mainCanvas if the device actually changed size. On a
   // slider drag it never does, so this branch is skipped entirely and the
@@ -315,6 +367,9 @@ async function renderMain(){
   // the standard offscreen-render-then-blit ("double buffering") pattern.
   mainCtx.clearRect(0,0,w,h);
   mainCtx.drawImage(finalCanvas, 0, 0, w, h);
+  // A tiny copy, stretched and blurred by CSS, fills the space around the
+  // iPad/iPhone frame so there are no black bars.
+  backdropCanvas.getContext('2d').drawImage(finalCanvas, 0, 0, backdropCanvas.width, backdropCanvas.height);
 
   document.getElementById('resLabel').textContent =
     `${DEVICES[state.device].w} × ${DEVICES[state.device].h}`;
@@ -382,7 +437,13 @@ function syncControlsFromState(){
   $('angleVal').textContent = state.angle+'°';
   $('glowEnabled').checked = state.glowEnabled;
   $('glowColor').value = state.glowColor;
-  $('glowPos').value = state.glowPos;
+  $('glowPos').style.setProperty('--glow-color', state.glowColor);
+  document.querySelectorAll('#glowPos button').forEach(b=>{
+    const on = b.dataset.pos === state.glowPos;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', on);
+    b.setAttribute('role', 'radio');
+  });
   $('glowOpacity').value = state.glowOpacity;
   $('glowOpacityVal').textContent = state.glowOpacity+'%';
   $('shadows').value = state.shadows;
@@ -420,8 +481,10 @@ function syncActivePalette(){
 });
 $('angle').addEventListener('input', e=>{ state.angle=+e.target.value; $('angleVal').textContent=state.angle+'°'; scheduleRender(); });
 $('glowEnabled').addEventListener('change', e=>{ state.glowEnabled=e.target.checked; $('glowControls').style.display=state.glowEnabled?'block':'none'; scheduleRender(); });
-$('glowColor').addEventListener('input', e=>{ state.glowColor=e.target.value; scheduleRender(); });
-$('glowPos').addEventListener('change', e=>{ state.glowPos=e.target.value; scheduleRender(); });
+$('glowColor').addEventListener('input', e=>{ state.glowColor=e.target.value; $('glowPos').style.setProperty('--glow-color', state.glowColor); scheduleRender(); });
+document.querySelectorAll('#glowPos button').forEach(b=>{
+  b.addEventListener('click', ()=>{ state.glowPos=b.dataset.pos; syncControlsFromState(); scheduleRender(); });
+});
 $('glowOpacity').addEventListener('input', e=>{ state.glowOpacity=+e.target.value; $('glowOpacityVal').textContent=state.glowOpacity+'%'; scheduleRender(); });
 $('shadows').addEventListener('input', e=>{ state.shadows=+e.target.value; $('shadowsVal').textContent=state.shadows.toFixed(2); scheduleRender(); });
 $('highlights').addEventListener('input', e=>{ state.highlights=+e.target.value; $('highlightsVal').textContent=state.highlights.toFixed(2); scheduleRender(); });
@@ -434,6 +497,7 @@ document.querySelectorAll('#deviceSeg button').forEach(b=>{
     if(state.device === b.dataset.device) return;
     state.device=b.dataset.device;
     syncControlsFromState();
+    layoutFrame();
     scheduleRender();
     buildGallery({ reshuffle:false });
   });
@@ -504,14 +568,15 @@ async function buildGallery({ reshuffle = true } = {}){
   if(reshuffle || galleryCfgs.length === 0){
     galleryCfgs = Array.from({ length:6 }, randomCfg);
   }
-  const { w, h } = computeDeviceCanvasSize(state.device, 240);
+  // ~2x the size they're shown at, for sharp thumbnails.
+  const { w, h } = computeDeviceCanvasSize(state.device, 140);
 
   // Render all six first and swap them in together, so the row doesn't
   // collapse and re-grow while it rebuilds.
   const thumbs = [];
   for(const cfg of galleryCfgs){
     try {
-      thumbs.push({ cfg, canvas: await renderToCanvas(w, h, cfg) });
+      thumbs.push({ cfg, canvas: await renderToCanvas('thumb', w, h, cfg) });
     } catch (err) {
       console.error('Gallery thumbnail failed:', err);
     }
@@ -531,15 +596,23 @@ async function buildGallery({ reshuffle = true } = {}){
     dl.addEventListener('click', (ev)=>{ ev.stopPropagation(); saveWallpaper({ ...cfg, device: state.device }); });
     wrap.appendChild(dl);
 
-    wrap.addEventListener('click', ()=>{
-      state = { ...state, ...cfg, colors:[...cfg.colors] };
-      syncControlsFromState();
-      scheduleRender();
-    });
+    wrap.addEventListener('click', ()=> applyVariation(galleryCfgs.indexOf(cfg)));
     return wrap;
   }));
 }
 $('refreshGallery').addEventListener('click', ()=> buildGallery());
+
+// Index of the gallery variation last applied, for the full-screen view's
+// previous/next buttons.
+let variationIndex = -1;
+function applyVariation(i){
+  if(!galleryCfgs.length) return;
+  variationIndex = (i + galleryCfgs.length) % galleryCfgs.length;
+  const cfg = galleryCfgs[variationIndex];
+  state = { ...state, ...cfg, colors:[...cfg.colors] };
+  syncControlsFromState();
+  scheduleRender();
+}
 
 // ---- save / export ----
 // Renders the config at full device resolution, then hands the PNG bytes
@@ -551,9 +624,9 @@ function showNote(text, clearAfterMs, tone = ''){
   clearTimeout(noteTimer);
   const note = $('loadingNote');
   note.textContent = text;
-  note.className = `loading-note ${tone}`;
+  note.className = `glass toast ${text ? 'visible' : ''} ${tone}`;
   note.title = text;
-  if(clearAfterMs) noteTimer = setTimeout(()=>{ note.textContent=''; note.className='loading-note'; }, clearAfterMs);
+  if(clearAfterMs) noteTimer = setTimeout(()=>{ note.className = `glass toast ${tone}`; }, clearAfterMs);
 }
 
 function canvasToPngBlob(canvas){
@@ -624,6 +697,62 @@ if(window.electronAPI?.onUpdateStatus){
   window.electronAPI.getUpdateStatus().then(showUpdate);
 }
 
+// ---- full-screen view ----
+// Hides every panel and makes the window truly full screen. A small bar
+// fades in when the mouse moves and out again after a short pause.
+let wakeTimer;
+function wakeControls(){
+  if(!immersive) return;
+  document.body.classList.add('controls-awake');
+  clearTimeout(wakeTimer);
+  wakeTimer = setTimeout(()=>{
+    // Stay awake while the pointer is over the bar itself.
+    if(!$('immersiveBar').matches(':hover')) document.body.classList.remove('controls-awake');
+  }, 2000);
+}
+
+function setImmersive(on){
+  if(immersive === on) return;
+  immersive = on;
+  document.body.classList.toggle('immersive', on);
+  window.electronAPI?.setFullScreen?.(on);
+  layoutFrame();
+  scheduleRender();
+  if(on) wakeControls();
+  else { clearTimeout(wakeTimer); document.body.classList.remove('controls-awake'); }
+}
+
+$('fullscreenBtn').addEventListener('click', ()=> setImmersive(true));
+$('exitFullscreen').addEventListener('click', ()=> setImmersive(false));
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && immersive) setImmersive(false); });
+document.addEventListener('mousemove', wakeControls);
+// Leaving full screen from the OS (macOS green button, Windows F11 etc.).
+window.electronAPI?.onFullScreenChange?.(isFull=>{ if(!isFull) setImmersive(false); });
+
+$('immersiveShuffle').addEventListener('click', ()=> $('shuffleBtn').click());
+$('immersiveSave').addEventListener('click', ()=> $('downloadBtn').click());
+$('prevVariation').addEventListener('click', ()=> applyVariation(variationIndex - 1));
+$('nextVariation').addEventListener('click', ()=> applyVariation(variationIndex + 1));
+
+$('lockToggle').addEventListener('change', e=> document.body.classList.toggle('show-lock', e.target.checked));
+$('ambientToggle').addEventListener('change', e=> document.body.classList.toggle('no-backdrop', !e.target.checked));
+document.body.classList.add('show-lock');
+
+function updateLockClock(){
+  const now = new Date();
+  $('lockTime').textContent = now.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }).replace(/\s?[AP]M$/i, '');
+  $('lockDate').textContent = now.toLocaleDateString([], { weekday:'long', day:'numeric', month:'long' });
+}
+updateLockClock();
+setInterval(updateLockClock, 30000);
+
+let resizeTimer;
+addEventListener('resize', ()=>{
+  layoutFrame();
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(scheduleRender, 150);
+});
+
 // ---- init ----
 async function init(){
   if(window.electronAPI?.platform) document.body.classList.add(`platform-${window.electronAPI.platform}`);
@@ -633,6 +762,11 @@ async function init(){
   }
   buildPaletteRow();
   syncControlsFromState();
+  // Place the frame without animating it in from nowhere.
+  frameEl.style.transition = 'none';
+  layoutFrame();
+  frameEl.getBoundingClientRect();
+  frameEl.style.transition = '';
   await renderMain();
   await buildGallery();
 }

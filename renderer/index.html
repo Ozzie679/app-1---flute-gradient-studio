@@ -8,126 +8,115 @@
 </head>
 <body>
 
-<header>
-  <h1>Flute Gradient Studio <span class="beta-badge">Beta</span></h1>
-  <p>Original fluted-glass gradient wallpapers for Mac, iPad and iPhone.</p>
-  <div class="update-banner" id="updateBanner" role="status" hidden>
-    <span id="updateText"></span>
-    <button id="updateBtn"></button>
+<!-- The wallpaper is the whole window. For iPad/iPhone it sits in a
+     device-shaped frame over a blurred copy of itself (no black bars). -->
+<div class="stage" id="stage">
+  <canvas id="backdrop" width="64" height="40" aria-hidden="true"></canvas>
+  <div class="frame" id="frame">
+    <canvas id="main"></canvas>
+    <div class="lockscreen" id="lockscreen" aria-hidden="true">
+      <div class="island"></div>
+      <div class="lock-date" id="lockDate"></div>
+      <div class="lock-time" id="lockTime"></div>
+    </div>
   </div>
-</header>
+</div>
 
-<div class="layout">
-  <aside class="panel">
-    <div class="panel-scroll">
+<div class="drag-strip" aria-hidden="true"></div>
 
-      <section class="section">
-        <h2 class="section-title">Colour</h2>
+<!-- ---- top bar ---- -->
+<div class="glass topbar chrome">
+  <span class="app-title">Flute Gradient Studio <span class="beta-badge">Beta</span></span>
+  <div class="seg" id="deviceSeg" role="group" aria-label="Device">
+    <button data-device="desktop" class="active">Mac</button>
+    <button data-device="ipad">iPad</button>
+    <button data-device="iphone">iPhone</button>
+  </div>
+  <button class="icon-btn" id="fullscreenBtn" aria-label="Full-screen view" title="Full-screen view">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+  </button>
+</div>
 
-        <div class="group">
-          <div class="group-label">Palette presets</div>
-          <div class="swatch-row" id="paletteRow"></div>
-        </div>
+<div class="glass update-banner chrome" id="updateBanner" role="status" hidden>
+  <span id="updateText"></span>
+  <button id="updateBtn"></button>
+</div>
 
-        <div class="group">
-          <div class="group-label">Gradient colours</div>
-          <div class="colors-row">
-            <label class="color-input-wrap"><span>Start</span><input type="color" id="colorA"></label>
-            <label class="color-input-wrap"><span>Mid</span><input type="color" id="colorB"></label>
-            <label class="color-input-wrap"><span>End</span><input type="color" id="colorC"></label>
-          </div>
-        </div>
-
-        <div class="group">
-          <label class="group-label" for="angle">Angle <span class="val mono" id="angleVal"></span></label>
-          <input type="range" id="angle" min="0" max="180" step="1">
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="section-title-row">
-          <h2 class="section-title">Glow</h2>
-          <input type="checkbox" class="switch" id="glowEnabled" aria-label="Glow highlight" checked>
-        </div>
-
-        <div id="glowControls">
-          <div class="group glow-row">
-            <label class="color-input-wrap glow-color"><span>Colour</span><input type="color" id="glowColor"></label>
-            <label class="color-input-wrap glow-pos"><span>Position</span>
-              <select id="glowPos" class="select-field">
-                <option value="tl">Top left</option>
-                <option value="tr">Top right</option>
-                <option value="bl">Bottom left</option>
-                <option value="br">Bottom right</option>
-                <option value="c">Center</option>
-              </select>
-            </label>
-          </div>
-          <div class="group">
-            <label class="group-label" for="glowOpacity">Strength <span class="val mono" id="glowOpacityVal"></span></label>
-            <input type="range" id="glowOpacity" min="5" max="70" step="1">
-          </div>
-        </div>
-      </section>
-
-      <section class="section">
-        <h2 class="section-title">Glass</h2>
-
-        <div class="group">
-          <label class="group-label" for="fluteSize">Flute size <span class="val mono" id="fluteSizeVal"></span></label>
-          <input type="range" id="fluteSize" min="0.4" max="0.8" step="0.01">
-        </div>
-        <div class="group">
-          <label class="group-label" for="fluteBlur">Flute blur <span class="val mono" id="fluteBlurVal"></span></label>
-          <input type="range" id="fluteBlur" min="0" max="0.6" step="0.01">
-        </div>
-        <div class="group">
-          <label class="group-label" for="distortion">Distortion <span class="val mono" id="distortionVal"></span></label>
-          <input type="range" id="distortion" min="0" max="0.5" step="0.01">
-        </div>
-        <div class="group">
-          <label class="group-label" for="shadows">Shadow depth <span class="val mono" id="shadowsVal"></span></label>
-          <input type="range" id="shadows" min="0" max="0.6" step="0.01">
-        </div>
-        <div class="group">
-          <label class="group-label" for="highlights">Highlight strength <span class="val mono" id="highlightsVal"></span></label>
-          <input type="range" id="highlights" min="0" max="0.35" step="0.01">
-        </div>
-      </section>
-
+<!-- ---- controls panel ---- -->
+<aside class="glass panel chrome">
+  <section class="section">
+    <h2 class="section-title">Colour</h2>
+    <div class="swatch-row" id="paletteRow"></div>
+    <div class="colors-row">
+      <label class="chip-wrap"><input type="color" id="colorA" aria-label="Start colour"><span>Start</span></label>
+      <label class="chip-wrap"><input type="color" id="colorB" aria-label="Mid colour"><span>Mid</span></label>
+      <label class="chip-wrap"><input type="color" id="colorC" aria-label="End colour"><span>End</span></label>
     </div>
+    <label class="slider-row" for="angle"><span>Angle</span><span class="val mono" id="angleVal"></span></label>
+    <input type="range" id="angle" min="0" max="180" step="1">
+  </section>
 
-    <div class="panel-footer">
-      <div class="seg" id="deviceSeg" role="group" aria-label="Device">
-        <button data-device="desktop" class="active">Mac</button>
-        <button data-device="ipad">iPad</button>
-        <button data-device="iphone">iPhone</button>
+  <section class="section">
+    <div class="section-title-row">
+      <h2 class="section-title">Glow</h2>
+      <input type="checkbox" class="switch" id="glowEnabled" aria-label="Glow highlight" checked>
+    </div>
+    <div id="glowControls">
+      <div class="glow-row">
+        <label class="chip-wrap"><input type="color" id="glowColor" aria-label="Glow colour"><span>Colour</span></label>
+        <div class="glow-pos" id="glowPos" role="radiogroup" aria-label="Glow position">
+          <button data-pos="tl" aria-label="Top left"></button><span></span><button data-pos="tr" aria-label="Top right"></button>
+          <span></span><button data-pos="c" aria-label="Centre"></button><span></span>
+          <button data-pos="bl" aria-label="Bottom left"></button><span></span><button data-pos="br" aria-label="Bottom right"></button>
+        </div>
       </div>
-      <div class="btn-row">
-        <button class="btn" id="shuffleBtn">Shuffle</button>
-        <button class="btn primary" id="downloadBtn">Save PNG</button>
-      </div>
-      <div class="loading-note" id="loadingNote" role="status"></div>
+      <label class="slider-row" for="glowOpacity"><span>Strength</span><span class="val mono" id="glowOpacityVal"></span></label>
+      <input type="range" id="glowOpacity" min="5" max="70" step="1">
     </div>
-  </aside>
+  </section>
 
-  <main class="stage">
-    <div class="preview-wrap">
-      <canvas id="main"></canvas>
-    </div>
-    <div class="stage-meta">
-      <span id="paletteName">Custom</span>
-      <span class="mono" id="resLabel"></span>
-    </div>
+  <section class="section">
+    <h2 class="section-title">Glass</h2>
+    <label class="slider-row" for="fluteSize"><span>Flute size</span><span class="val mono" id="fluteSizeVal"></span></label>
+    <input type="range" id="fluteSize" min="0.4" max="0.8" step="0.01">
+    <label class="slider-row" for="fluteBlur"><span>Flute blur</span><span class="val mono" id="fluteBlurVal"></span></label>
+    <input type="range" id="fluteBlur" min="0" max="0.6" step="0.01">
+    <label class="slider-row" for="distortion"><span>Distortion</span><span class="val mono" id="distortionVal"></span></label>
+    <input type="range" id="distortion" min="0" max="0.5" step="0.01">
+    <label class="slider-row" for="shadows"><span>Shadow depth</span><span class="val mono" id="shadowsVal"></span></label>
+    <input type="range" id="shadows" min="0" max="0.6" step="0.01">
+    <label class="slider-row" for="highlights"><span>Highlight strength</span><span class="val mono" id="highlightsVal"></span></label>
+    <input type="range" id="highlights" min="0" max="0.35" step="0.01">
+  </section>
+</aside>
 
-    <div class="gallery-block">
-      <div class="gallery-head">
-        <h2>Quick variations</h2>
-        <button id="refreshGallery">↻ Refresh</button>
-      </div>
-      <div class="gallery" id="gallery"></div>
-    </div>
-  </main>
+<!-- ---- bottom bars ---- -->
+<div class="bottom-row chrome">
+  <div class="glass tray">
+    <span class="tray-label">Variations</span>
+    <div class="gallery" id="gallery"></div>
+    <button class="icon-btn tray-refresh" id="refreshGallery" aria-label="New variations" title="New variations">↻</button>
+  </div>
+  <div class="glass actions">
+    <span class="meta"><span id="paletteName">Custom</span> · <span class="mono" id="resLabel"></span></span>
+    <button class="btn" id="shuffleBtn">Shuffle</button>
+    <button class="btn primary" id="downloadBtn">Save PNG</button>
+  </div>
+</div>
+
+<div class="glass toast" id="loadingNote" role="status"></div>
+
+<!-- ---- full-screen view controls (shown on mouse move) ---- -->
+<div class="glass immersive-bar" id="immersiveBar">
+  <button class="icon-btn" id="prevVariation" aria-label="Previous variation" title="Previous variation">‹</button>
+  <button class="btn" id="immersiveShuffle">Shuffle</button>
+  <button class="icon-btn" id="nextVariation" aria-label="Next variation" title="Next variation">›</button>
+  <span class="divider"></span>
+  <label class="toggle-row device-only"><input type="checkbox" class="switch" id="lockToggle" checked> Lock screen</label>
+  <label class="toggle-row device-only"><input type="checkbox" class="switch" id="ambientToggle" checked> Backdrop</label>
+  <span class="divider device-only"></span>
+  <button class="btn primary" id="immersiveSave">Save PNG</button>
+  <button class="btn ghost" id="exitFullscreen">Exit · Esc</button>
 </div>
 
 <script type="module" src="app.js"></script>

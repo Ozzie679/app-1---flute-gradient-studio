@@ -32,6 +32,11 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 
+  // Keep the renderer's full-screen view in sync when the OS toggles it.
+  const win = mainWindow;
+  win.on('leave-full-screen', () => win.webContents.send('fullscreen-changed', false));
+  win.on('enter-full-screen', () => win.webContents.send('fullscreen-changed', true));
+
   // Uncomment while developing to open devtools automatically:
   // mainWindow.webContents.openDevTools();
 }
@@ -46,6 +51,10 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('save-settings', (_event, settings) => {
     store.set('gradientSettings', settings);
+  });
+
+  ipcMain.handle('set-fullscreen', (event, on) => {
+    BrowserWindow.fromWebContents(event.sender)?.setFullScreen(Boolean(on));
   });
 
   createWindow();
