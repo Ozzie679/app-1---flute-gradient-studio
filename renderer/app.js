@@ -1,6 +1,7 @@
 import {
   ShaderMount,
   flutedGlassFragmentShader,
+  staticMeshGradientFragmentShader,
   GlassGridShapes,
   GlassDistortionShapes,
   getShaderColorFromString,
@@ -13,34 +14,55 @@ const DEVICES = {
   iphone:  { label:'iPhone',        w:1320, h:2868 }
 };
 
+// Each palette is 4-6 colour spots for the mesh gradient, plus a glow tint.
+// The first four are presets matched to reference wallpapers: their `look`
+// sets the shape, waves and glass too.
 const PALETTES = [
-  { name:'Arctic Sky',    colors:['#0b2340','#2f7fb0','#dff3f0'], glow:'#ffffff' },
-  { name:'Sunset Ember',  colors:['#3a0d1f','#c9411f','#f0dfc8'], glow:'#ffb27a' },
-  { name:'Nebula Violet', colors:['#0d0a26','#5a3fc0','#e46bd6'], glow:'#c9a8ff' },
-  { name:'Citrus Punch',  colors:['#1c1440','#2255aa','#f5d548'], glow:'#fff2b0' },
-  { name:'Aurora Teal',   colors:['#050912','#2fd6b0','#6a3fd6'], glow:'#9dffe6' },
-  { name:'Cotton Candy',  colors:['#3a2a66','#e07ad6','#dff2ff'], glow:'#ffe3f7' },
-  { name:'Midnight Rose', colors:['#160b2e','#8a1d55','#ff6a4a'], glow:'#ff9d7a' },
-  { name:'Golden Hour',   colors:['#132848','#e08a2f','#fff3d6'], glow:'#ffdca0' },
-  { name:'Berry Coral',   colors:['#3a1030','#e0396f','#ffb37a'], glow:'#ffd6a8' },
-  { name:'Mint Frost',    colors:['#0a1f2e','#3fb8a8','#eafff6'], glow:'#c8fff0' }
+  { name:'Lavender Moss', colors:['#aebec0','#111800','#a3acf2','#94925b','#e54d21','#a6bb47'], glow:'#d9ebee',
+    look:{shape:62,angle:76,softness:0,haze:0.52,waveX:0.59,waveXShift:0.3,waveY:0.92,waveYShift:0.49,fluteSize:0.54,distortion:0.81,fluteBlur:0.07,shadows:0.38,highlights:0.1,glassShape:2,shift:-0.02} },
+  { name:'Amber Dusk', colors:['#ffffc5','#351f0d','#312a03','#e0a622','#1a1d27','#4a61bd'], glow:'#fff2b0',
+    look:{shape:11,angle:332,softness:0.18,haze:0.88,waveX:0.33,waveXShift:0.28,waveY:0.46,waveYShift:0.17,fluteSize:0.54,distortion:0.52,fluteBlur:0.25,shadows:0.16,highlights:0.03,glassShape:1,shift:0.34} },
+  { name:'Peach Flare', colors:['#ffbfbb','#f44b30','#b683f9','#9174ff','#ffdc92','#d921a6'], glow:'#ffd6a8',
+    look:{shape:22,angle:95,softness:0.27,haze:0.17,waveX:0.53,waveXShift:0.16,waveY:0.68,waveYShift:0,fluteSize:0.54,distortion:0.5,fluteBlur:0.16,shadows:0.09,highlights:0.08,glassShape:1,shift:-0.12} },
+  { name:'Aurora Night', colors:['#acfad1','#0b1b3d','#9d1151','#ff2824','#c5f4b3','#6985c3'], glow:'#c8fff0',
+    look:{shape:49,angle:140,softness:0.01,haze:0.48,waveX:0.67,waveXShift:0.7,waveY:0.28,waveYShift:0.01,fluteSize:0.54,distortion:0.85,fluteBlur:0.02,shadows:0.28,highlights:0.07,glassShape:1,shift:0.01} },
+  { name:'Arctic Sky',    colors:['#0b2340','#2f7fb0','#dff3f0','#6ab4d8'], glow:'#ffffff' },
+  { name:'Sunset Ember',  colors:['#3a0d1f','#c9411f','#f0dfc8','#f08a4b'], glow:'#ffb27a' },
+  { name:'Nebula Violet', colors:['#0d0a26','#5a3fc0','#e46bd6','#8f7cff'], glow:'#c9a8ff' },
+  { name:'Citrus Punch',  colors:['#1c1440','#2255aa','#f5d548','#e98a2c'], glow:'#fff2b0' },
+  { name:'Aurora Teal',   colors:['#050912','#2fd6b0','#6a3fd6','#1b4f6b'], glow:'#9dffe6' },
+  { name:'Cotton Candy',  colors:['#3a2a66','#e07ad6','#dff2ff','#9fb4ff'], glow:'#ffe3f7' },
+  { name:'Midnight Rose', colors:['#160b2e','#8a1d55','#ff6a4a','#c2386b'], glow:'#ff9d7a' },
+  { name:'Golden Hour',   colors:['#132848','#e08a2f','#fff3d6','#f2b45a'], glow:'#ffdca0' },
+  { name:'Berry Coral',   colors:['#3a1030','#e0396f','#ffb37a','#ff7a6b'], glow:'#ffd6a8' },
+  { name:'Mint Frost',    colors:['#0a1f2e','#3fb8a8','#eafff6','#7fd8c4'], glow:'#c8fff0' }
 ];
 const GLOW_POS = { tl:[0.22,0.22], tr:[0.78,0.22], bl:[0.22,0.78], br:[0.78,0.78], c:[0.5,0.5] };
+const MIN_COLORS = 3, MAX_COLORS = 6;
 
 
 let state = {
   device:'desktop',
   colors:[...PALETTES[0].colors],
-  angle:112,
+  angle:0,
+  shape:42,
+  waveX:0.35,
+  waveY:0.35,
+  waveXShift:0.25,
+  waveYShift:0.6,
+  softness:0.4,
+  haze:0.25,
   glowEnabled:true,
   glowColor:PALETTES[0].glow,
   glowPos:'tr',
   glowOpacity:32,
   shadows:0.2,
   highlights:0.08,
-  fluteSize:0.55,
-  distortion:0,
+  fluteSize:0.5,
+  distortion:0.3,
   fluteBlur:0.08,
+  glassShape:GlassDistortionShapes.prism,
+  shift:0,
   paletteName:PALETTES[0].name
 };
 
@@ -62,16 +84,7 @@ function hexToRgba(hex, a){
   return `rgba(${r},${g},${b},${a})`;
 }
 
-function gradientCoords(w,h,angleDeg){
-  const a = angleDeg * Math.PI/180;
-  const cx = w/2, cy = h/2;
-  const len = Math.sqrt(w*w+h*h)/2;
-  return { x0:cx-Math.cos(a)*len, y0:cy-Math.sin(a)*len, x1:cx+Math.cos(a)*len, y1:cy+Math.sin(a)*len };
-}
-
-// Paints one soft radial patch of color, blended onto whatever's already on
-// the canvas. This is the building block for both the automatic accent
-// blobs and the user-controlled glow highlight.
+// Paints one soft radial patch of colour, blended onto the canvas.
 function drawBlob(ctx, gx, gy, radius, color, opacity, blend){
   ctx.save();
   ctx.globalCompositeOperation = blend;
@@ -83,79 +96,120 @@ function drawBlob(ctx, gx, gy, radius, color, opacity, blend){
   ctx.restore();
 }
 
-// Builds the flat color layer that the fluted-glass shader then distorts: a
-// linear base gradient, two automatic accent blobs in the gradient's
-// transition zone (so the middle isn't a straight blend), plus the user's
-// glow highlight.
-function buildColorField(w, h, cfg){
-  const canvas = document.createElement('canvas');
+// Maps the controls onto the mesh gradient shader. Shape is the seed that
+// places the colour spots; the waves bend the whole layout (their phases
+// aren't sliders, "New shape" re-rolls them).
+function meshUniforms(cfg){
+  return {
+    u_colors: cfg.colors.map(c => getShaderColorFromString(c)),
+    u_colorsCount: cfg.colors.length,
+    u_positions: cfg.shape,
+    u_waveX: cfg.waveX,
+    u_waveXShift: cfg.waveXShift,
+    u_waveY: cfg.waveY,
+    u_waveYShift: cfg.waveYShift,
+    u_mixing: cfg.softness,
+    u_rotation: cfg.angle,
+  };
+}
+
+// Builds the colour layer that the fluted glass then refracts: an organic
+// mesh gradient (rendered by `meshMount`), plus the optional glow.
+function buildColorField({ mount }, w, h, cfg){
+  if(mount.gl.isContextLost()) throw new Error('WebGL context lost');
+  mount.setUniforms(meshUniforms(cfg)); // renders synchronously
+
+  let canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
-
-  const {x0,y0,x1,y1} = gradientCoords(w,h,cfg.angle);
-  const grad = ctx.createLinearGradient(x0,y0,x1,y1);
-  cfg.colors.forEach((c,i)=> grad.addColorStop(i/(cfg.colors.length-1), c));
-  ctx.fillStyle = grad;
-  ctx.fillRect(0,0,w,h);
-
-  const angleRad = cfg.angle * Math.PI/180;
-  const dirX = Math.cos(angleRad), dirY = Math.sin(angleRad);
-  const perpX = -dirY, perpY = dirX;
-
-  const gx0 = w*(0.5 + perpX*0.26), gy0 = h*(0.5 + perpY*0.26);
-  drawBlob(ctx, gx0, gy0, Math.max(w,h)*0.55, cfg.colors[1], 0.55, 'soft-light');
-
-  const gx1 = w*(0.5 - perpX*0.24), gy1 = h*(0.5 - perpY*0.24);
-  drawBlob(ctx, gx1, gy1, Math.max(w,h)*0.48, cfg.colors[0], 0.35, 'overlay');
+  let ctx = canvas.getContext('2d');
+  ctx.drawImage(mount.canvasElement, 0, 0, w, h);
+  const hazePx = (cfg.haze || 0) * 0.3 * Math.min(w, h);
+  if(hazePx >= 0.5){
+    canvas = blurWithEdges(canvas, hazePx);
+    ctx = canvas.getContext('2d');
+  }
 
   if(cfg.glowEnabled){
     const [px,py] = GLOW_POS[cfg.glowPos];
     drawBlob(ctx, w*px, h*py, Math.max(w,h)*0.62, cfg.glowColor, cfg.glowOpacity/100, 'screen');
   }
-
-  return canvas;
+  return padSides(canvas);
 }
 
-// ShaderMount sizes its internal canvas via ResizeObserver, which fires
-// asynchronously. Without this wait, pixel readback happens before the
-// canvas has grown past its browser-default 300x150 size, producing
-// blank exports. This polls via its own ResizeObserver and resolves as
-// soon as the canvas matches the target size, with a timeout as a
-// safety net so a stuck render can't hang forever.
+// Gaussian blur that doesn't fade the borders: the edges are extended
+// outwards first, so the blur only mixes in the image's own edge colours.
+function blurWithEdges(src, px){
+  const w = src.width, h = src.height, p = Math.ceil(px*2);
+  const big = document.createElement('canvas'); big.width = w + 2*p; big.height = h + 2*p;
+  const b = big.getContext('2d');
+  b.drawImage(src, p, p);
+  b.drawImage(src, 0, 0, 1, h, 0, p, p, h);
+  b.drawImage(src, w-1, 0, 1, h, p+w, p, p, h);
+  b.drawImage(big, 0, p, w+2*p, 1, 0, 0, w+2*p, p);
+  b.drawImage(big, 0, p+h-1, w+2*p, 1, 0, p+h, w+2*p, p);
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const o = out.getContext('2d');
+  o.filter = `blur(${px}px)`;
+  o.drawImage(big, -p, -p);
+  return out;
+}
+
+// Flutes near the left/right edges refract from beyond the image, which the
+// glass shader renders as transparent (dark lines in the output). So the
+// field gets side margins filled by stretching its edge columns; the glass
+// crops back to the visible size.
+const SIDE_PAD = 0.12;
+function padSides(canvas){
+  const { width:w, height:h } = canvas;
+  const p = Math.ceil(w * SIDE_PAD);
+  const out = document.createElement('canvas');
+  out.width = w + 2*p; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(canvas, p, 0);
+  ctx.drawImage(canvas, 0, 0, 1, h, 0, 0, p, h);
+  ctx.drawImage(canvas, w-1, 0, 1, h, p+w, 0, p, h);
+  return out;
+}
+
+// ShaderMount sizes its canvas from a ResizeObserver, which fires
+// asynchronously; reading pixels before then gives blank output. Polls until
+// the canvas reaches the target size (timers, not requestAnimationFrame, so
+// it also works while the window is hidden), giving up after timeoutMs.
 function waitForCanvasResize(canvas, expectedWidth, expectedHeight, timeoutMs = 3000){
+  const start = performance.now();
   return new Promise((resolve) => {
-    if (canvas.width === expectedWidth && canvas.height === expectedHeight) {
-      resolve();
-      return;
-    }
-    let settled = false;
-    const observer = new ResizeObserver(() => {
-      if (settled) return;
-      if (canvas.width === expectedWidth && canvas.height === expectedHeight) {
-        settled = true;
-        observer.disconnect();
-        clearTimeout(timeoutId);
-        resolve();
+    (function check(){
+      if (canvas.width === expectedWidth && canvas.height === expectedHeight) return resolve();
+      if (performance.now() - start > timeoutMs) {
+        console.warn(`[shader] canvas never reached ${expectedWidth}x${expectedHeight}, stuck at ${canvas.width}x${canvas.height}. Reading pixels anyway.`);
+        return resolve();
       }
-    });
-    observer.observe(canvas);
-    const timeoutId = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      observer.disconnect();
-      console.warn(`[shader] canvas never reached ${expectedWidth}x${expectedHeight} within ${timeoutMs}ms, stuck at ${canvas.width}x${canvas.height}. Reading pixels anyway.`);
-      resolve();
-    }, timeoutMs);
+      setTimeout(check, 8);
+    })();
   });
 }
 
-function shaderUniforms(cfg){
+// Flute size 0..1 sets how many flutes fit across the screen's shorter side,
+// from 80 (fine) to 12 (wide), on a log scale; 0.5 is ~30, like the
+// reference wallpapers. The shader counts flutes across the image width, so
+// landscape screens get proportionally more.
+const FLUTES_FINE = 80, FLUTES_WIDE = 12;
+function fluteCount(fluteSize, aspect){
+  const acrossShort = FLUTES_FINE * Math.pow(FLUTES_WIDE / FLUTES_FINE, fluteSize);
+  return acrossShort * Math.max(1, aspect);
+}
+
+// `aspect` is the visible output's; `imageScale` is how much wider the
+// padded field is, since the shader counts flutes across the whole image.
+function shaderUniforms(cfg, aspect, imageScale = 1){
   return {
     u_shadows: cfg.shadows,
     u_highlights: cfg.highlights,
-    u_size: cfg.fluteSize,
+    u_size: clamp((200 - fluteCount(cfg.fluteSize, aspect) * imageScale) / 195, 0, 1),
     u_distortion: cfg.distortion,
     u_blur: cfg.fluteBlur,
+    u_distortionShape: cfg.glassShape,
+    u_shift: cfg.shift,
   };
 }
 
@@ -163,12 +217,20 @@ function shaderUniforms(cfg){
 // with this 1x1 placeholder and the real color field is uploaded afterwards.
 const PLACEHOLDER_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
 
-// Creates a FlutedGlass ShaderMount in a hidden w x h container.
-async function createShaderMount(w, h){
-  const img = new Image();
-  img.src = PLACEHOLDER_IMAGE_SRC;
-  await img.decode();
+const SIZING_UNIFORMS = {
+  u_fit: ShaderFitOptions.cover,
+  u_scale: 1,
+  u_rotation: 0,
+  u_originX: 0.5,
+  u_originY: 0.5,
+  u_offsetX: 0,
+  u_offsetY: 0,
+  u_worldWidth: 0,
+  u_worldHeight: 0,
+};
 
+// Creates a ShaderMount for `fragmentShader` in a hidden w x h container.
+async function createMount(w, h, fragmentShader, uniforms){
   const container = document.createElement('div');
   container.style.position = 'fixed';
   container.style.left = '-99999px';
@@ -180,32 +242,8 @@ async function createShaderMount(w, h){
   try {
     const mount = new ShaderMount(
       container,
-      flutedGlassFragmentShader,
-      {
-        u_image: img,
-        u_colorBack: getShaderColorFromString('#00000000'),
-        u_colorShadow: getShaderColorFromString('#000000'),
-        u_colorHighlight: getShaderColorFromString('#ffffff'),
-        ...shaderUniforms(state),
-        u_shape: GlassGridShapes.lines,
-        u_angle: 0,
-        u_distortionShape: GlassDistortionShapes.prism,
-        u_shift: 0,
-        u_stretch: 0,
-        u_edges: 0,
-        u_marginLeft: 0, u_marginRight: 0, u_marginTop: 0, u_marginBottom: 0,
-        u_grainMixer: 0,
-        u_grainOverlay: 0,
-        u_fit: ShaderFitOptions.cover,
-        u_scale: 1,
-        u_rotation: 0,
-        u_originX: 0.5,
-        u_originY: 0.5,
-        u_offsetX: 0,
-        u_offsetY: 0,
-        u_worldWidth: 0,
-        u_worldHeight: 0,
-      },
+      fragmentShader,
+      { ...SIZING_UNIFORMS, ...uniforms },
       { preserveDrawingBuffer: true },
       0, 0, 1, w*h
     );
@@ -215,6 +253,39 @@ async function createShaderMount(w, h){
     container.remove();
     throw err;
   }
+}
+
+// The fluted glass that refracts the colour layer.
+async function createGlassMount(w, h){
+  const img = new Image();
+  img.src = PLACEHOLDER_IMAGE_SRC;
+  await img.decode();
+  return createMount(w, h, flutedGlassFragmentShader, {
+        u_image: img,
+        u_colorBack: getShaderColorFromString('#00000000'),
+        u_colorShadow: getShaderColorFromString('#000000'),
+        u_colorHighlight: getShaderColorFromString('#ffffff'),
+        ...shaderUniforms(state, w/h),
+        u_shape: GlassGridShapes.lines,
+        u_angle: 0,
+        u_stretch: 0,
+        u_edges: 0,
+        // Just outside the canvas: at 0 the shader draws a thin frame line.
+        u_marginLeft: -0.02, u_marginRight: -0.02, u_marginTop: -0.02, u_marginBottom: -0.02,
+        u_grainMixer: 0,
+        u_grainOverlay: 0,
+  });
+}
+
+// The organic colour layer. Its box is the whole canvas, so a given shape
+// keeps the same layout on every device (stretched to the screen's shape).
+function createMeshMount(w, h){
+  return createMount(w, h, staticMeshGradientFragmentShader, {
+    ...meshUniforms(state),
+    u_grainMixer: 0,
+    u_grainOverlay: 0,
+    u_fit: ShaderFitOptions.none,
+  });
 }
 
 function disposeShaderMount({ mount, container }){
@@ -236,10 +307,12 @@ function drawWithShader({ mount }, field, cfg){
   gl.bindTexture(gl.TEXTURE_2D, mount.textures.get('u_image'));
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, field);
   gl.uniform1f(mount.uniformLocations.u_imageAspectRatio, field.width / field.height);
-  mount.setUniforms(shaderUniforms(cfg)); // also renders synchronously
+  // The mount is the visible size; "cover" fit crops the padded field's margins.
+  const { width:w, height:h } = mount.canvasElement;
+  mount.setUniforms(shaderUniforms(cfg, w / h, field.width / w)); // also renders synchronously
 
   const out = document.createElement('canvas');
-  out.width = field.width; out.height = field.height;
+  out.width = w; out.height = h;
   out.getContext('2d').drawImage(mount.canvasElement, 0, 0);
   return out;
 }
@@ -254,34 +327,42 @@ function drawWithShader({ mount }, field, cfg){
 // contexts (browsers cap how many can be alive at once).
 const shaderMounts = new Map();
 
-async function getShaderMount(role, w, h){
+async function getShaderMount(role, w, h, create){
   const entry = shaderMounts.get(role);
   if(entry){
     const existing = await entry.promise.catch(()=>null);
     if(existing && entry.w === w && entry.h === h && !existing.mount.gl.isContextLost()) return existing;
-    if(shaderMounts.get(role) !== entry) return getShaderMount(role, w, h); // replaced while we waited
+    if(shaderMounts.get(role) !== entry) return getShaderMount(role, w, h, create); // replaced while we waited
     if(existing) disposeShaderMount(existing);
     shaderMounts.delete(role);
   }
-  const promise = createShaderMount(w, h);
+  const promise = create(w, h);
   shaderMounts.set(role, { w, h, promise });
   return promise;
 }
 
 // Renders a config to a brand new w x h canvas, reusing the role's mount.
 async function renderToCanvas(role, w, h, cfg){
-  const mount = await getShaderMount(role, w, h);
-  return drawWithShader(mount, buildColorField(w, h, cfg), cfg);
+  const mesh = await getShaderMount(`${role}-mesh`, w, h, createMeshMount);
+  const glass = await getShaderMount(role, w, h, createGlassMount);
+  return drawWithShader(glass, buildColorField(mesh, w, h, cfg), cfg);
 }
 
 // Full-resolution exports are rare and large (up to ~23 MP), so they get a
 // throwaway mount rather than holding that much GPU memory for the session.
 async function renderOnce(w, h, cfg){
-  const mount = await createShaderMount(w, h);
+  let field;
+  const mesh = await createMeshMount(w, h);
   try {
-    return drawWithShader(mount, buildColorField(w, h, cfg), cfg);
+    field = buildColorField(mesh, w, h, cfg);
   } finally {
-    disposeShaderMount(mount);
+    disposeShaderMount(mesh);
+  }
+  const glass = await createGlassMount(w, h);
+  try {
+    return drawWithShader(glass, field, cfg);
+  } finally {
+    disposeShaderMount(glass);
   }
 }
 
@@ -402,16 +483,36 @@ async function scheduleRender(){
 function applySavedSettings(saved){
   if(!saved || typeof saved !== 'object') return;
   if(saved.device && DEVICES[saved.device]) state.device = saved.device;
-  if(Array.isArray(saved.colors) && saved.colors.length === 3) state.colors = [...saved.colors];
-  if(typeof saved.angle === 'number') state.angle = saved.angle;
+  const hex = /^#[0-9a-f]{6}$/i;
+  if(Array.isArray(saved.colors) && saved.colors.length >= MIN_COLORS && saved.colors.every(c => hex.test(c))){
+    state.colors = saved.colors.slice(0, MAX_COLORS);
+  }
+  // Settings saved before the organic style have no shape; their old
+  // linear-gradient angle means something else, so it isn't carried over.
+  if(typeof saved.shape === 'number'){
+    state.shape = clamp(saved.shape, 0, 100);
+    if(typeof saved.angle === 'number') state.angle = clamp(saved.angle, 0, 360);
+  }
+  for(const k of ['waveX','waveY','waveXShift','waveYShift']){
+    if(typeof saved[k] === 'number') state[k] = clamp(saved[k], 0, 1);
+  }
+  if(typeof saved.softness === 'number') state.softness = clamp(saved.softness, 0, 1);
+  if(typeof saved.haze === 'number') state.haze = clamp(saved.haze, 0, 1);
+  if(Object.values(GlassDistortionShapes).includes(saved.glassShape)) state.glassShape = saved.glassShape;
+  if(typeof saved.shift === 'number') state.shift = clamp(saved.shift, -1, 1);
   if(typeof saved.glowEnabled === 'boolean') state.glowEnabled = saved.glowEnabled;
   if(saved.glowColor) state.glowColor = saved.glowColor;
   if(saved.glowPos && GLOW_POS[saved.glowPos]) state.glowPos = saved.glowPos;
   if(typeof saved.glowOpacity === 'number') state.glowOpacity = saved.glowOpacity;
   if(typeof saved.shadows === 'number') state.shadows = clamp(saved.shadows, 0, 0.6);
   if(typeof saved.highlights === 'number') state.highlights = clamp(saved.highlights, 0, 0.35);
-  if(typeof saved.fluteSize === 'number') state.fluteSize = clamp(saved.fluteSize, 0.4, 0.8);
-  if(typeof saved.distortion === 'number') state.distortion = clamp(saved.distortion, 0, 0.5);
+  if(typeof saved.fluteSize === 'number'){
+    // Before the organic style, fluteSize was the shader's raw u_size.
+    const v = typeof saved.shape === 'number' ? saved.fluteSize
+      : Math.log((200 - 195*saved.fluteSize) / FLUTES_FINE) / Math.log(FLUTES_WIDE / FLUTES_FINE);
+    state.fluteSize = clamp(v, 0, 1);
+  }
+  if(typeof saved.distortion === 'number') state.distortion = clamp(saved.distortion, 0, 1);
   if(typeof saved.fluteBlur === 'number') state.fluteBlur = clamp(saved.fluteBlur, 0, 0.6);
   if(saved.paletteName) state.paletteName = saved.paletteName;
 }
@@ -429,12 +530,41 @@ function saveCurrentSettings(){
 // ---- controls wiring ----
 const $ = id => document.getElementById(id);
 
+function buildColorPickers(){
+  const row = $('colorsRow');
+  row.querySelectorAll('input[type=color]').forEach(el => el.remove());
+  state.colors.forEach((c, i)=>{
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = c;
+    input.setAttribute('aria-label', `Colour ${i+1}`);
+    input.addEventListener('input', e=>{
+      state.colors[i] = e.target.value;
+      state.paletteName = 'Custom';
+      syncActivePalette();
+      scheduleRender();
+    });
+    row.insertBefore(input, $('removeColor'));
+  });
+  $('removeColor').disabled = state.colors.length <= MIN_COLORS;
+  $('addColor').disabled = state.colors.length >= MAX_COLORS;
+}
+
 function syncControlsFromState(){
-  $('colorA').value = state.colors[0];
-  $('colorB').value = state.colors[1];
-  $('colorC').value = state.colors[2];
+  buildColorPickers();
+  $('shape').value = state.shape;
+  $('shapeVal').textContent = Math.round(state.shape);
+  $('waveX').value = state.waveX;
+  $('waveXVal').textContent = state.waveX.toFixed(2);
+  $('waveY').value = state.waveY;
+  $('waveYVal').textContent = state.waveY.toFixed(2);
+  $('softness').value = state.softness;
+  $('softnessVal').textContent = state.softness.toFixed(2);
+  $('glassShape').value = String(state.glassShape);
+  $('haze').value = state.haze;
+  $('hazeVal').textContent = state.haze.toFixed(2);
   $('angle').value = state.angle;
-  $('angleVal').textContent = state.angle+'°';
+  $('angleVal').textContent = Math.round(state.angle)+'°';
   $('glowEnabled').checked = state.glowEnabled;
   $('glowColor').value = state.glowColor;
   $('glowPos').style.setProperty('--glow-color', state.glowColor);
@@ -471,14 +601,35 @@ function syncActivePalette(){
   });
 }
 
-['colorA','colorB','colorC'].forEach((id,i)=>{
-  $(id).addEventListener('input', e=>{
-    state.colors[i] = e.target.value;
-    state.paletteName = 'Custom';
-    syncActivePalette();
-    scheduleRender();
-  });
+$('addColor').addEventListener('click', ()=>{
+  if(state.colors.length >= MAX_COLORS) return;
+  // New spot: a blend of two existing colours, so it fits the palette.
+  const mixHex = (a, b)=> '#' + [1,3,5].map(i => Math.round((parseInt(a.substr(i,2),16) + parseInt(b.substr(i,2),16))/2).toString(16).padStart(2,'0')).join('');
+  state.colors.push(mixHex(state.colors[0], state.colors[state.colors.length-1]));
+  state.paletteName = 'Custom';
+  syncControlsFromState();
+  scheduleRender();
 });
+$('removeColor').addEventListener('click', ()=>{
+  if(state.colors.length <= MIN_COLORS) return;
+  state.colors.pop();
+  state.paletteName = 'Custom';
+  syncControlsFromState();
+  scheduleRender();
+});
+$('shape').addEventListener('input', e=>{ state.shape=+e.target.value; $('shapeVal').textContent=state.shape; scheduleRender(); });
+$('newShape').addEventListener('click', ()=>{
+  state.shape = Math.round(Math.random()*100);
+  state.waveXShift = Math.random();
+  state.waveYShift = Math.random();
+  syncControlsFromState();
+  scheduleRender();
+});
+$('waveX').addEventListener('input', e=>{ state.waveX=+e.target.value; $('waveXVal').textContent=state.waveX.toFixed(2); scheduleRender(); });
+$('waveY').addEventListener('input', e=>{ state.waveY=+e.target.value; $('waveYVal').textContent=state.waveY.toFixed(2); scheduleRender(); });
+$('softness').addEventListener('input', e=>{ state.softness=+e.target.value; $('softnessVal').textContent=state.softness.toFixed(2); scheduleRender(); });
+$('glassShape').addEventListener('change', e=>{ state.glassShape=+e.target.value; scheduleRender(); });
+$('haze').addEventListener('input', e=>{ state.haze=+e.target.value; $('hazeVal').textContent=state.haze.toFixed(2); scheduleRender(); });
 $('angle').addEventListener('input', e=>{ state.angle=+e.target.value; $('angleVal').textContent=state.angle+'°'; scheduleRender(); });
 $('glowEnabled').addEventListener('change', e=>{ state.glowEnabled=e.target.checked; $('glowControls').style.display=state.glowEnabled?'block':'none'; scheduleRender(); });
 $('glowColor').addEventListener('input', e=>{ state.glowColor=e.target.value; $('glowPos').style.setProperty('--glow-color', state.glowColor); scheduleRender(); });
@@ -512,8 +663,10 @@ function buildPaletteRow(){
     el.title = p.name;
     el.dataset.name = p.name;
     el.setAttribute('aria-label', `${p.name} palette`);
-    el.style.background = `linear-gradient(135deg, ${p.colors[0]}, ${p.colors[1]}, ${p.colors[2]})`;
+    el.style.background = `linear-gradient(135deg, ${p.colors.join(', ')})`;
     el.addEventListener('click', ()=>{
+      // Presets (palettes with a `look`) set the whole wallpaper, not just colours.
+      if(p.look) state = { ...state, ...p.look, glowEnabled:false };
       state.colors=[...p.colors];
       state.glowColor=p.glow;
       state.paletteName=p.name;
@@ -535,16 +688,25 @@ function randomCfg(){
   const posKeys = Object.keys(GLOW_POS);
   return {
     colors:[...p.colors],
-    angle: Math.round(70 + Math.random()*70),
-    glowEnabled: Math.random()>0.15,
+    angle: Math.round(Math.random()*360),
+    shape: Math.round(Math.random()*100),
+    waveX: randomInRange(0, 0.6),
+    waveY: randomInRange(0, 0.6),
+    waveXShift: randomInRange(0, 1),
+    waveYShift: randomInRange(0, 1),
+    softness: randomInRange(0, 0.7),
+    haze: randomInRange(0.1, 0.5),
+    glowEnabled: Math.random() < 0.3,
     glowColor: p.glow,
     glowPos: randomFrom(posKeys),
     glowOpacity: Math.round(20+Math.random()*35),
-    shadows: randomInRange(0, 0.4),
-    highlights: randomInRange(0, 0.2),
-    fluteSize: randomInRange(0.4, 0.8),
-    distortion: randomInRange(0, 0.04),
-    fluteBlur: randomInRange(0, 0.25, 2),
+    shadows: randomInRange(0.05, 0.3),
+    highlights: randomInRange(0.02, 0.15),
+    fluteSize: randomInRange(0.4, 0.65),
+    distortion: randomInRange(0.15, 0.45),
+    fluteBlur: randomInRange(0, 0.2, 2),
+    glassShape: randomFrom([GlassDistortionShapes.prism, GlassDistortionShapes.prism, GlassDistortionShapes.lens, GlassDistortionShapes.contour]),
+    shift: 0,
     paletteName: p.name
   };
 }

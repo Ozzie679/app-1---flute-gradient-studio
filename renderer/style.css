@@ -177,7 +177,21 @@ body.platform-darwin .panel{ top:52px; }
 .swatch:hover{ transform:scale(1.08); }
 .swatch.active{ box-shadow:0 0 0 2px rgba(14,12,22,0.9), 0 0 0 4px #fff; }
 
-.colors-row{ display:flex; gap:8px; margin-bottom:12px; }
+.colors-row{ display:flex; gap:6px; margin-bottom:14px; align-items:center; }
+.colors-row input[type="color"]{ flex:1; min-width:0; height:30px; }
+.color-count{
+  flex:none; width:24px; height:24px; padding:0;
+  border:1px solid var(--line-strong); border-radius:50%;
+  background:var(--control-fill); cursor:pointer; font-size:14px; line-height:1;
+}
+.color-count:hover{ background:rgba(255,255,255,0.16); }
+.color-count:disabled{ opacity:.35; cursor:default; }
+.val-group{ display:flex; align-items:center; gap:6px; }
+.mini-btn{
+  border:none; padding:0 4px; border-radius:6px; cursor:pointer;
+  background:var(--control-fill); font-size:14px; line-height:18px;
+}
+.mini-btn:hover{ background:rgba(255,255,255,0.16); }
 .chip-wrap{ flex:1; display:flex; flex-direction:column; gap:5px; font-size:11px; color:var(--muted); cursor:pointer; }
 input[type="color"]{
   -webkit-appearance:none;
@@ -203,6 +217,12 @@ input[type="color"]::-webkit-color-swatch{ border:none; border-radius:999px; }
 .glow-pos button:hover{ background:rgba(255,255,255,0.14); }
 .glow-pos button.active{ background:var(--glow-color, #fff); border-color:transparent; }
 
+.select-row{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:var(--muted); margin-bottom:12px; }
+.select-row select{
+  font:inherit; color:#fff; background:var(--control-fill);
+  border:1px solid var(--line-strong); border-radius:8px; padding:4px 8px; cursor:pointer;
+}
+.select-row option{ background:#1a1724; }
 .slider-row{
   display:flex; justify-content:space-between;
   font-size:12px; color:var(--muted);
