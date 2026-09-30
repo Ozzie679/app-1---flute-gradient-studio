@@ -18,14 +18,20 @@ const DEVICES = {
 // The first four are presets matched to reference wallpapers: their `look`
 // sets the shape, waves and glass too.
 const PALETTES = [
-  { name:'Lavender Moss', colors:['#aebec0','#111800','#a3acf2','#94925b','#e54d21','#a6bb47'], glow:'#d9ebee',
-    look:{shape:62,angle:76,softness:0,haze:0.52,waveX:0.59,waveXShift:0.3,waveY:0.92,waveYShift:0.49,fluteSize:0.54,distortion:0.81,fluteBlur:0.07,shadows:0.38,highlights:0.1,glassShape:2,shift:-0.02} },
-  { name:'Amber Dusk', colors:['#ffffc5','#351f0d','#312a03','#e0a622','#1a1d27','#4a61bd'], glow:'#fff2b0',
-    look:{shape:11,angle:332,softness:0.18,haze:0.88,waveX:0.33,waveXShift:0.28,waveY:0.46,waveYShift:0.17,fluteSize:0.54,distortion:0.52,fluteBlur:0.25,shadows:0.16,highlights:0.03,glassShape:1,shift:0.34} },
-  { name:'Peach Flare', colors:['#ffbfbb','#f44b30','#b683f9','#9174ff','#ffdc92','#d921a6'], glow:'#ffd6a8',
-    look:{shape:22,angle:95,softness:0.27,haze:0.17,waveX:0.53,waveXShift:0.16,waveY:0.68,waveYShift:0,fluteSize:0.54,distortion:0.5,fluteBlur:0.16,shadows:0.09,highlights:0.08,glassShape:1,shift:-0.12} },
-  { name:'Aurora Night', colors:['#acfad1','#0b1b3d','#9d1151','#ff2824','#c5f4b3','#6985c3'], glow:'#c8fff0',
-    look:{shape:49,angle:140,softness:0.01,haze:0.48,waveX:0.67,waveXShift:0.7,waveY:0.28,waveYShift:0.01,fluteSize:0.54,distortion:0.85,fluteBlur:0.02,shadows:0.28,highlights:0.07,glassShape:1,shift:0.01} },
+  { name:'Lavender Moss', colors:['#aebec0','#0c1800','#a3acf2','#94925b','#e54d21','#a6bb47'], glow:'#d9ebee',
+    look:{shape:62,angle:76,softness:0,haze:0.52,waveX:0.59,waveXShift:0.3,waveY:0.92,waveYShift:0.49,fluteSize:0.54,distortion:0.69,fluteBlur:0.14,shadows:0.07,highlights:0.02,glassShape:2,shift:0,vShift:1} },
+  { name:'Amber Dusk', colors:['#ffffc4','#351f0d','#322803','#e0a622','#191d25','#4a61bd'], glow:'#fff2b0',
+    look:{shape:11,angle:332,softness:0.17,haze:0.88,waveX:0.33,waveXShift:0.28,waveY:0.46,waveYShift:0.17,fluteSize:0.55,distortion:0.49,fluteBlur:0,shadows:0.26,highlights:0.04,glassShape:1,shift:0.34,vShift:-0.14} },
+  { name:'Peach Flare', colors:['#ffc1be','#f44e30','#b683f9','#9174ff','#ffdc92','#d923a6'], glow:'#ffd6a8',
+    look:{shape:22,angle:94,softness:0.28,haze:0.17,waveX:0.54,waveXShift:0.16,waveY:0.68,waveYShift:0,fluteSize:0.55,distortion:1,fluteBlur:0.07,shadows:0.21,highlights:0.06,glassShape:3,shift:0,vShift:-0.29} },
+  { name:'Aurora Night', colors:['#acfad1','#0b1b3d','#a31250','#fb2b26','#c4f5b5','#6985c3'], glow:'#c8fff0',
+    look:{shape:49,angle:140,softness:0.01,haze:0.49,waveX:0.68,waveXShift:0.7,waveY:0.29,waveYShift:0.02,fluteSize:0.57,distortion:0.55,fluteBlur:0.23,shadows:0,highlights:0.05,glassShape:1,shift:0,vShift:-1} },
+  { name:'Violet Ember', colors:['#72241f','#d33c22','#6be2ff','#a6d6c6','#936997','#8784df'], glow:'#ffc9a8',
+    look:{shape:85,angle:189,softness:0,haze:0.73,waveX:0.14,waveXShift:0.34,waveY:0.85,waveYShift:0.1,fluteSize:0.55,distortion:0.93,fluteBlur:0.33,shadows:0.24,highlights:0.03,glassShape:1,shift:0.28,vShift:-0.07} },
+  { name:'Midnight Spectrum', colors:['#120c21','#004a82','#ff5329','#1da02c'], glow:'#ffc46b',
+    look:{shape:51,angle:4,softness:0,haze:0.94,waveX:0.32,waveXShift:0.57,waveY:0.23,waveYShift:0.82,fluteSize:0.54,distortion:0.99,fluteBlur:0.01,shadows:0.01,highlights:0.09,glassShape:1,shift:0,vShift:-1} },
+  { name:'Solar Night', colors:['#79184c','#070113','#ffff30','#150366','#000612'], glow:'#fff3a0',
+    look:{shape:33,angle:197,softness:0,haze:0.82,waveX:1,waveXShift:0.8,waveY:0.05,waveYShift:0.04,fluteSize:0.54,distortion:1,fluteBlur:0.57,shadows:0.54,highlights:0.01,glassShape:4,shift:-0.29,vShift:0} },
   { name:'Arctic Sky',    colors:['#0b2340','#2f7fb0','#dff3f0','#6ab4d8'], glow:'#ffffff' },
   { name:'Sunset Ember',  colors:['#3a0d1f','#c9411f','#f0dfc8','#f08a4b'], glow:'#ffb27a' },
   { name:'Nebula Violet', colors:['#0d0a26','#5a3fc0','#e46bd6','#8f7cff'], glow:'#c9a8ff' },
@@ -63,6 +69,7 @@ let state = {
   fluteBlur:0.08,
   glassShape:GlassDistortionShapes.prism,
   shift:0,
+  vShift:0,
   paletteName:PALETTES[0].name
 };
 
@@ -199,13 +206,39 @@ function fluteCount(fluteSize, aspect){
   return acrossShort * Math.max(1, aspect);
 }
 
-// `aspect` is the visible output's; `imageScale` is how much wider the
+// Patches to the stock fluted-glass shader:
+// - It sizes highlight lines (~2px) and flute blur (1px sample step) in screen
+//   pixels, so the small preview had strong flutes and full-size exports faint
+//   ones. Both now scale by u_designScale = flute width / DESIGN_FLUTE_PX, so
+//   a wallpaper looks the same at every size.
+// - u_vShift adds vertical refraction: each flute shows the image shifted up
+//   or down, which is what makes top-to-bottom gradients look stepped.
+// - Refracted samples are clamped inside the image, and its edge fade is off:
+//   past the edge it drew them transparent, and with vertical refraction the
+//   fade itself left dark spikes along the top and bottom edges.
+const DESIGN_FLUTE_PX = 11.5;
+const GLASS_PATCHES = [
+  ['uniform float u_blur;', 'uniform float u_blur;\nuniform float u_designScale;\nuniform float u_vShift;'],
+  ['  fractOrigUV.x += distortion;', '  fractOrigUV.x += distortion;\n  fractOrigUV.y += distortion * u_vShift;'],
+  ['  float frame = getUvFrame(uv, edgeDistortion);', '  uv = clamp(uv, vec2(.0005), vec2(.9995));\n  float frame = 1.;'],
+  ['float highlightsWidth = 2. * max(.001, fwidth(UvToFract.x));', 'float highlightsWidth = 2. * max(.001, fwidth(UvToFract.x)) * u_designScale;'],
+  ['getBlur(u_image, uv, 1. / u_resolution / u_pixelRatio,', 'getBlur(u_image, uv, u_designScale / u_resolution / u_pixelRatio,'],
+];
+const glassFragmentShader = GLASS_PATCHES.reduce((src, [from, to]) => {
+  if(!src.includes(from)) throw new Error(`Fluted glass shader changed; patch needs updating: ${from}`);
+  return src.replace(from, to);
+}, flutedGlassFragmentShader);
+
+// `w`/`h` are the visible output's size; `imageScale` is how much wider the
 // padded field is, since the shader counts flutes across the whole image.
-function shaderUniforms(cfg, aspect, imageScale = 1){
+function shaderUniforms(cfg, w, h, imageScale = 1){
+  const flutes = fluteCount(cfg.fluteSize, w / h);
   return {
+    u_designScale: (w / flutes) / DESIGN_FLUTE_PX,
+    u_vShift: cfg.vShift,
     u_shadows: cfg.shadows,
     u_highlights: cfg.highlights,
-    u_size: clamp((200 - fluteCount(cfg.fluteSize, aspect) * imageScale) / 195, 0, 1),
+    u_size: clamp((200 - flutes * imageScale) / 195, 0, 1),
     u_distortion: cfg.distortion,
     u_blur: cfg.fluteBlur,
     u_distortionShape: cfg.glassShape,
@@ -260,12 +293,12 @@ async function createGlassMount(w, h){
   const img = new Image();
   img.src = PLACEHOLDER_IMAGE_SRC;
   await img.decode();
-  return createMount(w, h, flutedGlassFragmentShader, {
+  return createMount(w, h, glassFragmentShader, {
         u_image: img,
         u_colorBack: getShaderColorFromString('#00000000'),
         u_colorShadow: getShaderColorFromString('#000000'),
         u_colorHighlight: getShaderColorFromString('#ffffff'),
-        ...shaderUniforms(state, w/h),
+        ...shaderUniforms(state, w, h),
         u_shape: GlassGridShapes.lines,
         u_angle: 0,
         u_stretch: 0,
@@ -309,7 +342,7 @@ function drawWithShader({ mount }, field, cfg){
   gl.uniform1f(mount.uniformLocations.u_imageAspectRatio, field.width / field.height);
   // The mount is the visible size; "cover" fit crops the padded field's margins.
   const { width:w, height:h } = mount.canvasElement;
-  mount.setUniforms(shaderUniforms(cfg, w / h, field.width / w)); // also renders synchronously
+  mount.setUniforms(shaderUniforms(cfg, w, h, field.width / w)); // also renders synchronously
 
   const out = document.createElement('canvas');
   out.width = w; out.height = h;
@@ -500,11 +533,12 @@ function applySavedSettings(saved){
   if(typeof saved.haze === 'number') state.haze = clamp(saved.haze, 0, 1);
   if(Object.values(GlassDistortionShapes).includes(saved.glassShape)) state.glassShape = saved.glassShape;
   if(typeof saved.shift === 'number') state.shift = clamp(saved.shift, -1, 1);
+  if(typeof saved.vShift === 'number') state.vShift = clamp(saved.vShift, -1, 1);
   if(typeof saved.glowEnabled === 'boolean') state.glowEnabled = saved.glowEnabled;
   if(saved.glowColor) state.glowColor = saved.glowColor;
   if(saved.glowPos && GLOW_POS[saved.glowPos]) state.glowPos = saved.glowPos;
   if(typeof saved.glowOpacity === 'number') state.glowOpacity = saved.glowOpacity;
-  if(typeof saved.shadows === 'number') state.shadows = clamp(saved.shadows, 0, 0.6);
+  if(typeof saved.shadows === 'number') state.shadows = clamp(saved.shadows, 0, 1);
   if(typeof saved.highlights === 'number') state.highlights = clamp(saved.highlights, 0, 0.35);
   if(typeof saved.fluteSize === 'number'){
     // Before the organic style, fluteSize was the shader's raw u_size.
@@ -561,6 +595,8 @@ function syncControlsFromState(){
   $('softness').value = state.softness;
   $('softnessVal').textContent = state.softness.toFixed(2);
   $('glassShape').value = String(state.glassShape);
+  $('vShift').value = state.vShift;
+  $('vShiftVal').textContent = state.vShift.toFixed(2);
   $('haze').value = state.haze;
   $('hazeVal').textContent = state.haze.toFixed(2);
   $('angle').value = state.angle;
@@ -628,6 +664,7 @@ $('newShape').addEventListener('click', ()=>{
 $('waveX').addEventListener('input', e=>{ state.waveX=+e.target.value; $('waveXVal').textContent=state.waveX.toFixed(2); scheduleRender(); });
 $('waveY').addEventListener('input', e=>{ state.waveY=+e.target.value; $('waveYVal').textContent=state.waveY.toFixed(2); scheduleRender(); });
 $('softness').addEventListener('input', e=>{ state.softness=+e.target.value; $('softnessVal').textContent=state.softness.toFixed(2); scheduleRender(); });
+$('vShift').addEventListener('input', e=>{ state.vShift=+e.target.value; $('vShiftVal').textContent=state.vShift.toFixed(2); scheduleRender(); });
 $('glassShape').addEventListener('change', e=>{ state.glassShape=+e.target.value; scheduleRender(); });
 $('haze').addEventListener('input', e=>{ state.haze=+e.target.value; $('hazeVal').textContent=state.haze.toFixed(2); scheduleRender(); });
 $('angle').addEventListener('input', e=>{ state.angle=+e.target.value; $('angleVal').textContent=state.angle+'°'; scheduleRender(); });
@@ -666,7 +703,7 @@ function buildPaletteRow(){
     el.style.background = `linear-gradient(135deg, ${p.colors.join(', ')})`;
     el.addEventListener('click', ()=>{
       // Presets (palettes with a `look`) set the whole wallpaper, not just colours.
-      if(p.look) state = { ...state, ...p.look, glowEnabled:false };
+      if(p.look) state = { ...state, shift:0, vShift:0, ...p.look, glowEnabled:false };
       state.colors=[...p.colors];
       state.glowColor=p.glow;
       state.paletteName=p.name;
@@ -707,6 +744,7 @@ function randomCfg(){
     fluteBlur: randomInRange(0, 0.2, 2),
     glassShape: randomFrom([GlassDistortionShapes.prism, GlassDistortionShapes.prism, GlassDistortionShapes.lens, GlassDistortionShapes.contour]),
     shift: 0,
+    vShift: Math.random() < 0.5 ? 0 : randomInRange(-0.4, 0.4),
     paletteName: p.name
   };
 }
