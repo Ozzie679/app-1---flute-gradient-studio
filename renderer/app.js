@@ -1083,9 +1083,32 @@ addEventListener('resize', ()=>{
   resizeTimer = setTimeout(scheduleRender, 150);
 });
 
+// ---- version badge ----
+// "1.0.0-beta.5" -> "Beta 5"; a full release like "1.2.0" -> "v1.2.0".
+// Hovering shows the exact version.
+function versionLabel(version){
+  const pre = /-(alpha|beta|rc)\.?(\d+)?/i.exec(version);
+  if(!pre) return `v${version}`;
+  const kind = pre[1].toLowerCase() === 'rc' ? 'RC' : pre[1][0].toUpperCase() + pre[1].slice(1).toLowerCase();
+  return pre[2] ? `${kind} ${pre[2]}` : kind;
+}
+
+async function showVersion(){
+  if(!window.electronAPI?.getVersion) return;
+  try {
+    const version = await window.electronAPI.getVersion();
+    const badge = $('versionBadge');
+    badge.textContent = versionLabel(version);
+    badge.title = `Version ${version}`;
+  } catch (err) {
+    console.error('Could not read app version:', err);
+  }
+}
+
 // ---- init ----
 async function init(){
   if(window.electronAPI?.platform) document.body.classList.add(`platform-${window.electronAPI.platform}`);
+  showVersion();
   if(window.electronAPI?.getSettings){
     const saved = await window.electronAPI.getSettings();
     applySavedSettings(saved);
