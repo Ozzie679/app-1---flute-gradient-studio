@@ -45,10 +45,22 @@
 <!-- ---- controls panel ---- -->
 <aside class="glass panel chrome">
   <section class="section">
+    <h2 class="section-title">Presets</h2>
+    <div class="swatch-row looks" id="presetRow"></div>
+    <div class="subhead-row">
+      <span class="subhead">My presets</span>
+      <button class="mini-btn text" id="savePreset" title="Save the current look">+ Save</button>
+    </div>
+    <div class="swatch-row looks" id="myPresetRow"></div>
+    <p class="empty-hint" id="myPresetEmpty">Save a look you like to get it back later.</p>
+  </section>
+
+  <section class="section">
     <h2 class="section-title">Colour</h2>
+    <span class="subhead">Palettes</span>
     <div class="swatch-row" id="paletteRow"></div>
     <div class="colors-row" id="colorsRow">
-      <!-- colour pickers are built by app.js (3-5 of them) -->
+      <!-- colour pickers are built by app.js (3-6 of them) -->
       <button class="color-count" id="removeColor" aria-label="Remove a colour" title="Remove a colour">−</button>
       <button class="color-count" id="addColor" aria-label="Add a colour" title="Add a colour">+</button>
     </div>

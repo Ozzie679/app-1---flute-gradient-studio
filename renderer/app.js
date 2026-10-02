@@ -632,7 +632,7 @@ function syncControlsFromState(){
 
 function syncActivePalette(){
   $('paletteName').textContent = state.paletteName;
-  document.querySelectorAll('#paletteRow .swatch').forEach(s=>{
+  document.querySelectorAll('.panel .swatch[data-name]').forEach(s=>{
     s.classList.toggle('active', s.dataset.name===state.paletteName);
   });
 }
@@ -691,28 +691,158 @@ document.querySelectorAll('#deviceSeg button').forEach(b=>{
   });
 });
 
-function buildPaletteRow(){
-  const row = $('paletteRow');
-  row.innerHTML='';
-  PALETTES.forEach((p)=>{
-    const el = document.createElement('button');
-    el.className='swatch';
-    el.title = p.name;
-    el.dataset.name = p.name;
-    el.setAttribute('aria-label', `${p.name} palette`);
-    el.style.background = `linear-gradient(135deg, ${p.colors.join(', ')})`;
-    el.addEventListener('click', ()=>{
-      // Presets (palettes with a `look`) set the whole wallpaper, not just colours.
-      if(p.look) state = { ...state, shift:0, vShift:0, ...p.look, glowEnabled:false };
-      state.colors=[...p.colors];
-      state.glowColor=p.glow;
-      state.paletteName=p.name;
+// ---- presets and palettes ----
+// Everything that makes up a wallpaper's look (device is not part of it).
+const LOOK_KEYS = ['colors','shape','angle','softness','haze','waveX','waveXShift','waveY','waveYShift',
+  'glowEnabled','glowColor','glowPos','glowOpacity','fluteSize','distortion','fluteBlur','shadows','highlights',
+  'glassShape','shift','vShift'];
+const MAX_USER_PRESETS = 30;
+let userPresets = [];
+
+function currentLook(src = state){
+  const look = {};
+  for(const k of LOOK_KEYS) look[k] = k === 'colors' ? [...src.colors] : src[k];
+  return look;
+}
+
+// Saved presets are read from disk, so they get the same checks as saved
+// settings: run them through applySavedSettings on a scratch copy of state.
+function sanitizeLook(look){
+  const keep = state;
+  state = { ...keep, colors:[...keep.colors] };
+  try {
+    applySavedSettings(look);
+    return currentLook(state);
+  } finally {
+    state = keep;
+  }
+}
+
+// Preset swatches are small real renders (flutes and all). They wait until
+// the main preview has drawn, then render one at a time on their own mount.
+const SWATCH_PX = 96;
+let releaseSwatches;
+let swatchQueue = new Promise(resolve => { releaseSwatches = resolve; });
+function renderSwatch(el, look){
+  swatchQueue = swatchQueue.then(async ()=>{
+    try {
+      const canvas = await renderToCanvas('swatch', SWATCH_PX, SWATCH_PX, { ...state, ...look });
+      el.querySelector('canvas')?.remove();
+      el.appendChild(canvas);
+    } catch (err) {
+      console.error('Preset thumbnail failed:', err);
+    }
+  });
+}
+
+function makeSwatch(name, colors, isLook, onClick){
+  const el = document.createElement('button');
+  el.className = isLook ? 'swatch look' : 'swatch';
+  el.title = name;
+  el.dataset.name = name;
+  el.setAttribute('aria-label', isLook ? `${name} preset` : `${name} palette`);
+  el.style.background = `linear-gradient(135deg, ${colors.join(', ')})`;
+  el.addEventListener('click', onClick);
+  return el;
+}
+
+function applyPalette(p){
+  // Presets (palettes with a `look`) set the whole wallpaper, not just colours.
+  if(p.look) state = { ...state, shift:0, vShift:0, ...p.look, glowEnabled:false };
+  state.colors = [...p.colors];
+  state.glowColor = p.glow;
+  state.paletteName = p.name;
+  syncControlsFromState();
+  scheduleRender();
+}
+
+function buildPaletteRows(){
+  $('presetRow').replaceChildren();
+  $('paletteRow').replaceChildren();
+  for(const p of PALETTES){
+    const el = makeSwatch(p.name, p.colors, Boolean(p.look), ()=> applyPalette(p));
+    if(p.look){
+      $('presetRow').appendChild(el);
+      renderSwatch(el, { shift:0, vShift:0, ...p.look, colors:p.colors, glowEnabled:false });
+    } else {
+      $('paletteRow').appendChild(el);
+    }
+  }
+}
+
+function buildMyPresetRow(){
+  const row = $('myPresetRow');
+  row.replaceChildren();
+  for(const preset of userPresets){
+    const wrap = document.createElement('div');
+    wrap.className = 'preset-wrap';
+    const el = makeSwatch(preset.name, preset.look.colors, true, ()=>{
+      state = { ...state, ...structuredClone(preset.look), paletteName: preset.name };
       syncControlsFromState();
       scheduleRender();
     });
-    row.appendChild(el);
-  });
+    const del = document.createElement('button');
+    del.className = 'preset-del';
+    del.textContent = '×';
+    del.title = `Delete ${preset.name}`;
+    del.setAttribute('aria-label', `Delete ${preset.name}`);
+    del.addEventListener('click', ()=>{
+      userPresets = userPresets.filter(p => p.id !== preset.id);
+      persistUserPresets();
+      buildMyPresetRow();
+    });
+    wrap.append(el, del);
+    row.appendChild(wrap);
+    renderSwatch(el, preset.look);
+  }
+  $('myPresetEmpty').hidden = userPresets.length > 0;
+  $('savePreset').disabled = userPresets.length >= MAX_USER_PRESETS;
+  syncActivePalette();
 }
+
+function persistUserPresets(){
+  if(window.electronAPI?.saveUserPresets){
+    window.electronAPI.saveUserPresets(userPresets);
+  } else {
+    try { localStorage.setItem('userPresets', JSON.stringify(userPresets)); } catch {}
+  }
+}
+
+async function loadUserPresets(){
+  let list = [];
+  try {
+    list = window.electronAPI?.getUserPresets
+      ? await window.electronAPI.getUserPresets()
+      : JSON.parse(localStorage.getItem('userPresets') || '[]');
+  } catch {}
+  if(!Array.isArray(list)) list = [];
+  userPresets = list
+    .filter(p => p && typeof p.name === 'string' && typeof p.id === 'string' && p.look && typeof p.look === 'object')
+    .slice(0, MAX_USER_PRESETS)
+    .map(p => ({ id:p.id, name:p.name.slice(0, 60), look:sanitizeLook(p.look) }));
+}
+
+$('savePreset').addEventListener('click', ()=>{
+  if(userPresets.length >= MAX_USER_PRESETS) return;
+  // Named after what it came from: "Peach Flare 2", "My look 1", ...
+  const base = state.paletteName && state.paletteName !== 'Custom'
+    ? state.paletteName.replace(/ \d+$/, '')
+    : 'My look';
+  const taken = new Set([...userPresets.map(p => p.name), ...PALETTES.map(p => p.name)]);
+  let n = 1;
+  while(taken.has(`${base} ${n}`)) n++;
+  const preset = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: `${base} ${n}`,
+    look: currentLook(),
+  };
+  userPresets.push(preset);
+  state.paletteName = preset.name;
+  persistUserPresets();
+  buildMyPresetRow();
+  saveCurrentSettings();
+  showNote(`✓ Saved preset "${preset.name}"`, 2500, 'ok');
+});
 
 function randomFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function randomInRange(min, max, decimals=2){
@@ -960,7 +1090,9 @@ async function init(){
     const saved = await window.electronAPI.getSettings();
     applySavedSettings(saved);
   }
-  buildPaletteRow();
+  await loadUserPresets();
+  buildPaletteRows();
+  buildMyPresetRow();
   syncControlsFromState();
   // Place the frame without animating it in from nowhere.
   frameEl.style.transition = 'none';
@@ -968,6 +1100,7 @@ async function init(){
   frameEl.getBoundingClientRect();
   frameEl.style.transition = '';
   await renderMain();
+  releaseSwatches();
   await buildGallery();
 }
 init();
