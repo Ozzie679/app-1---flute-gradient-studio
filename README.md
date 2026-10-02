@@ -23,10 +23,12 @@ DevTools inside the app while you work on it.
 ## Build a standalone app you can double-click
 
 ```bash
+npm install
 npm run dist
 ```
 
-This uses `electron-builder` to produce a real installer/app in the `dist/`
+`npm install` is needed once (and after pulling new code); without it you get
+"'electron-builder' is not recognized". This uses `electron-builder` to produce a real installer/app in the `dist/`
 folder:
 
 - macOS &rarr; `.dmg`

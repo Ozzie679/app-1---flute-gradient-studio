@@ -9,11 +9,11 @@
 const { app, BrowserWindow, ipcMain, net, shell } = require('electron');
 const semver = require('semver');
 
-// Same repo electron-builder publishes to (package.json "build.publish"),
-// so there's only one place to change it. It must be public: installed
-// copies check it without logging in.
-const { owner, repo } = require('./package.json').build.publish[0];
-const REPO = `${owner}/${repo}`;
+// Must match package.json "build.publish". It can't be read from there at
+// runtime: electron-builder strips the "build" section from the packaged
+// package.json. The repo must be public; installed copies check it without
+// logging in.
+const REPO = 'Ozzie679/app-1---flute-gradient-studio';
 const CHECK_DELAY_MS = 5000;
 
 let macDownloadUrl = null;
