@@ -52,6 +52,15 @@ app.whenReady().then(async () => {
     store.set('gradientSettings', settings);
   });
 
+  ipcMain.handle('get-user-presets', () => {
+    const list = store.get('userPresets', []);
+    return Array.isArray(list) ? list : [];
+  });
+
+  ipcMain.handle('save-user-presets', (_event, list) => {
+    if (Array.isArray(list)) store.set('userPresets', list);
+  });
+
   ipcMain.handle('set-fullscreen', (event, on) => {
     BrowserWindow.fromWebContents(event.sender)?.setFullScreen(Boolean(on));
   });

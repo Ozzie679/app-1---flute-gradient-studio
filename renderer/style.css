@@ -168,6 +168,28 @@ body.platform-darwin .panel{ top:52px; }
 .section-title-row .section-title{ margin:0; }
 
 .swatch-row{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
+.swatch-row:empty{ display:none; }
+.subhead{ display:block; font-size:11px; color:var(--muted); margin:0 0 8px; }
+.subhead-row{ display:flex; justify-content:space-between; align-items:center; margin:2px 0 8px; }
+.subhead-row .subhead{ margin:0; }
+.mini-btn.text{ font-size:11.5px; line-height:20px; padding:0 8px; }
+.empty-hint{ margin:0 0 6px; font-size:11.5px; color:var(--muted); }
+.empty-hint[hidden]{ display:none; }
+
+/* Presets show a real render of the look (flutes and all), not a colour blob. */
+.swatch.look{ position:relative; border-radius:10px; overflow:hidden; background-size:cover; }
+.swatch.look canvas{ position:absolute; inset:0; width:100%; height:100%; }
+.swatch.look.active{ box-shadow:0 0 0 2px rgba(14,12,22,0.9), 0 0 0 4px #fff; }
+.preset-wrap{ position:relative; }
+.preset-wrap .swatch{ width:100%; }
+.preset-del{
+  position:absolute; top:-5px; right:-5px;
+  width:18px; height:18px; padding:0; border-radius:50%;
+  border:1px solid var(--line-strong); background:#15121f; color:#fff;
+  font-size:11px; line-height:16px; cursor:pointer;
+  opacity:0; transition:opacity .12s ease;
+}
+.preset-wrap:hover .preset-del, .preset-del:focus-visible{ opacity:1; }
 .swatch{
   aspect-ratio:1; border:none; padding:0; cursor:pointer;
   border-radius:50%;

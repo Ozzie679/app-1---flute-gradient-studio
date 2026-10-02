@@ -38,6 +38,13 @@ folder:
 electron-builder auto-detects your current OS and builds for that platform.
 The first run downloads some extra tooling and can take a minute or two.
 
+## Presets
+
+The **Presets** row holds complete looks (colours, shape and glass) matched to
+reference wallpapers. **+ Save** under *My presets* keeps the current look;
+hover a saved preset and click × to delete it. Saved presets live in the same
+settings file as everything else, so they survive updates.
+
 ## Releasing a new version
 
 1. Bump `"version"` in `package.json` (e.g. `1.0.0-beta.3` → `1.0.0-beta.4`)
@@ -69,6 +76,11 @@ The app isn't code-signed (that costs money), so the first launch shows a
 warning:
 
 - **Windows:** "Windows protected your PC" → **More info** → **Run anyway**.
+  If instead you see "**Smart App Control** blocked an app that may be unsafe",
+  there is no Run anyway button: Smart App Control blocks every unsigned app.
+  The only workaround is turning it off (Windows Security → App & browser
+  control → Smart App Control), which can be hard to turn back on. It's
+  your call; signing the app would avoid this but isn't free.
 - **macOS:** "can't be opened" → open **System Settings → Privacy &
   Security**, scroll down and click **Open Anyway**. You may need to do this
   again after installing each new version.
@@ -94,3 +106,4 @@ Your last-used settings are remembered between launches via `electron-store`.
 ## Ideas for next iterations
 
 - Lock-screen preview for iPad (widgets row) and a home-screen preview
+- "Arc" colour layer for thin curved bands of light (Peach Flare tops out at ~85%)
