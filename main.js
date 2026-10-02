@@ -52,6 +52,8 @@ app.whenReady().then(async () => {
     store.set('gradientSettings', settings);
   });
 
+  ipcMain.handle('get-version', () => app.getVersion());
+
   ipcMain.handle('get-user-presets', () => {
     const list = store.get('userPresets', []);
     return Array.isArray(list) ? list : [];
